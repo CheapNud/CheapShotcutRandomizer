@@ -18,7 +18,7 @@ namespace CheapShotcutRandomizer.Tests.Components;
 /// Unit tests for RenderQueue.razor component using BUnit
 /// Tests cover component rendering, job management, queue control, and real-time updates
 /// </summary>
-public class RenderQueueTests : TestContext
+public class RenderQueueTests : BunitContext, IAsyncLifetime
 {
     private readonly Mock<IRenderQueueService> _mockQueueService;
     private readonly Mock<IRenderJobRepository> _mockRepository;
@@ -61,11 +61,18 @@ public class RenderQueueTests : TestContext
             });
     }
 
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public new async Task DisposeAsync()
+    {
+        await base.DisposeAsync();
+    }
+
     [Fact]
     public void RenderQueue_Renders_Successfully()
     {
         // Arrange & Act
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Assert
         component.Should().NotBeNull();
@@ -86,7 +93,7 @@ public class RenderQueueTests : TestContext
         _mockHardwareService.Setup(x => x.DetectHardwareAsync()).ReturnsAsync(hardware);
 
         // Act
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
         component.WaitForState(() => !component.Instance.GetType()
             .GetField("_isLoadingHardware", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .GetValue(component.Instance)!.Equals(true), TimeSpan.FromSeconds(2));
@@ -102,7 +109,7 @@ public class RenderQueueTests : TestContext
         _mockQueueService.Setup(x => x.IsQueuePaused).Returns(true);
 
         // Act
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Assert
         component.Markup.Should().Contain("Queue PAUSED");
@@ -116,7 +123,7 @@ public class RenderQueueTests : TestContext
         _mockQueueService.Setup(x => x.IsQueuePaused).Returns(false);
 
         // Act
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Assert
         component.Markup.Should().Contain("Queue RUNNING");
@@ -135,7 +142,7 @@ public class RenderQueueTests : TestContext
         _mockQueueService.Setup(x => x.GetActiveJobsAsync()).ReturnsAsync(activeJobs);
 
         // Act
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
         component.WaitForAssertion(() => component.Markup.Should().Contain("test1.mlt"));
 
         // Assert
@@ -150,7 +157,7 @@ public class RenderQueueTests : TestContext
         _mockQueueService.Setup(x => x.GetActiveJobsAsync()).ReturnsAsync(new List<RenderJob>());
 
         // Act
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
         component.WaitForAssertion(() => component.Markup.Should().Contain("Ready to render!"));
 
         // Assert
@@ -176,7 +183,7 @@ public class RenderQueueTests : TestContext
         _mockQueueService.Setup(x => x.GetCompletedJobsAsync()).ReturnsAsync(completedJobs);
 
         // Act
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Assert - Wait for async LoadJobs() to complete before verifying
         // This prevents race conditions in slower CI environments (GitHub Actions)
@@ -202,7 +209,7 @@ public class RenderQueueTests : TestContext
         _mockQueueService.Setup(x => x.GetFailedJobsAsync()).ReturnsAsync(failedJobs);
 
         // Act
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Assert - Wait for async LoadJobs() to complete before verifying
         // This prevents race conditions in slower CI environments (GitHub Actions)
@@ -216,7 +223,7 @@ public class RenderQueueTests : TestContext
     {
         // Arrange
         _mockQueueService.Setup(x => x.IsQueuePaused).Returns(true);
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Wait for component to finish loading (OnInitializedAsync)
         component.WaitForState(() =>
@@ -240,7 +247,7 @@ public class RenderQueueTests : TestContext
     {
         // Arrange
         _mockQueueService.Setup(x => x.IsQueuePaused).Returns(false);
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Wait for component to finish loading
         component.WaitForState(() =>
@@ -272,7 +279,7 @@ public class RenderQueueTests : TestContext
         _mockQueueService.Setup(x => x.AddJobAsync(It.IsAny<RenderJob>()))
             .ReturnsAsync(newJob.JobId);
 
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Act
         await component.InvokeAsync(async () =>
@@ -293,7 +300,7 @@ public class RenderQueueTests : TestContext
         var jobId = Guid.NewGuid();
         _mockQueueService.Setup(x => x.PauseJobAsync(jobId)).ReturnsAsync(true);
 
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Act
         await component.InvokeAsync(async () =>
@@ -314,7 +321,7 @@ public class RenderQueueTests : TestContext
         var jobId = Guid.NewGuid();
         _mockQueueService.Setup(x => x.CancelJobAsync(jobId)).ReturnsAsync(true);
 
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Act
         await component.InvokeAsync(async () =>
@@ -335,7 +342,7 @@ public class RenderQueueTests : TestContext
         var jobId = Guid.NewGuid();
         _mockQueueService.Setup(x => x.RetryJobAsync(jobId)).ReturnsAsync(true);
 
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Act
         await component.InvokeAsync(async () =>
@@ -356,7 +363,7 @@ public class RenderQueueTests : TestContext
         var jobId = Guid.NewGuid();
         _mockRepository.Setup(x => x.DeleteAsync(jobId)).Returns(Task.CompletedTask);
 
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Act
         await component.InvokeAsync(async () =>
@@ -384,7 +391,7 @@ public class RenderQueueTests : TestContext
         _mockQueueService.Setup(x => x.GetQueueStatisticsAsync()).ReturnsAsync(stats);
 
         // Act
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
         component.WaitForAssertion(() => component.Markup.Should().Contain("5 pending"));
 
         // Assert
@@ -396,7 +403,7 @@ public class RenderQueueTests : TestContext
     public void RenderQueue_Unsubscribes_From_Events_On_Disposal()
     {
         // Arrange
-        var component = RenderComponent<RenderQueue>();
+        var component = Render<RenderQueue>();
 
         // Act
         component.Dispose();

@@ -13,7 +13,7 @@ namespace CheapShotcutRandomizer.Tests.Components;
 /// Unit tests for RenderJobCard.razor component
 /// Tests cover job status display, progress tracking, file size formatting, and action buttons
 /// </summary>
-public class RenderJobCardTests : TestContext
+public class RenderJobCardTests : BunitContext, IAsyncLifetime
 {
     public RenderJobCardTests()
     {
@@ -21,6 +21,13 @@ public class RenderJobCardTests : TestContext
 
         // Setup JSInterop for MudBlazor components
         JSInterop.Mode = JSRuntimeMode.Loose;
+    }
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public new async Task DisposeAsync()
+    {
+        await base.DisposeAsync();
     }
 
     [Fact]
