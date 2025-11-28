@@ -36,7 +36,7 @@ public class RenderJobCardTests : TestContext
         };
 
         // Act
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob));
 
         // Assert
@@ -57,7 +57,7 @@ public class RenderJobCardTests : TestContext
         };
 
         // Act
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob));
 
         // Assert
@@ -81,7 +81,7 @@ public class RenderJobCardTests : TestContext
         };
 
         // Act
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob));
 
         // Assert
@@ -103,7 +103,7 @@ public class RenderJobCardTests : TestContext
         };
 
         // Act
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob));
 
         // Assert
@@ -124,7 +124,7 @@ public class RenderJobCardTests : TestContext
         };
 
         // Act
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob));
 
         // Assert
@@ -145,7 +145,7 @@ public class RenderJobCardTests : TestContext
         };
 
         // Act
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob));
 
         // Assert
@@ -168,7 +168,7 @@ public class RenderJobCardTests : TestContext
         };
 
         // Act
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob));
 
         // Assert
@@ -192,7 +192,7 @@ public class RenderJobCardTests : TestContext
         };
 
         // Act
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob));
 
         // Assert
@@ -211,7 +211,7 @@ public class RenderJobCardTests : TestContext
         };
 
         Guid? pausedJobId = null;
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob)
             .Add(p => p.OnPause, EventCallback.Factory.Create<Guid>(this, id => pausedJobId = id)));
 
@@ -236,7 +236,7 @@ public class RenderJobCardTests : TestContext
         };
 
         Guid? cancelledJobId = null;
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob)
             .Add(p => p.OnCancel, EventCallback.Factory.Create<Guid>(this, id => cancelledJobId = id)));
 
@@ -261,7 +261,7 @@ public class RenderJobCardTests : TestContext
         };
 
         Guid? resumedJobId = null;
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob)
             .Add(p => p.OnResume, EventCallback.Factory.Create<Guid>(this, id => resumedJobId = id)));
 
@@ -286,7 +286,7 @@ public class RenderJobCardTests : TestContext
         };
 
         Guid? retriedJobId = null;
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob)
             .Add(p => p.OnRetry, EventCallback.Factory.Create<Guid>(this, id => retriedJobId = id)));
 
@@ -311,7 +311,7 @@ public class RenderJobCardTests : TestContext
         };
 
         Guid? deletedJobId = null;
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob)
             .Add(p => p.OnDelete, EventCallback.Factory.Create<Guid>(this, id => deletedJobId = id)));
 
@@ -340,7 +340,7 @@ public class RenderJobCardTests : TestContext
         };
 
         // Act
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob));
 
         // Assert
@@ -362,7 +362,7 @@ public class RenderJobCardTests : TestContext
             LastError = "Critical rendering error occurred"
         };
 
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob));
 
         // Act
@@ -386,7 +386,7 @@ public class RenderJobCardTests : TestContext
             OutputPath = Path.GetTempFileName()
         };
 
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob));
 
         // Act
@@ -410,7 +410,7 @@ public class RenderJobCardTests : TestContext
         };
 
         // Act
-        var component = RenderComponent<RenderJobCard>(parameters => parameters
+        var component = Render<RenderJobCard>(parameters => parameters
             .Add(p => p.Job, renderJob));
 
         // Assert
