@@ -64,11 +64,21 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="CheapShotcutRandomizer.Core\CheapShotcutRandomizer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Exclude test project files from main project compilation -->
     <Compile Remove="CheapShotcutRandomizer.Tests/**" />
     <Content Remove="CheapShotcutRandomizer.Tests/**" />
     <EmbeddedResource Remove="CheapShotcutRandomizer.Tests/**" />
     <None Remove="CheapShotcutRandomizer.Tests/**" />
+
+    <!-- Exclude Core project files from main project compilation -->
+    <Compile Remove="CheapShotcutRandomizer.Core/**" />
+    <Content Remove="CheapShotcutRandomizer.Core/**" />
+    <EmbeddedResource Remove="CheapShotcutRandomizer.Core/**" />
+    <None Remove="CheapShotcutRandomizer.Core/**" />
   </ItemGroup>
 
 </Project>
