@@ -3,14 +3,13 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics;
 using System.Text.Json;
 using CheapShotcutRandomizer.Models;
+using CheapShotcutRandomizer.Core.Models;
 using CheapShotcutRandomizer.Data;
 using CheapShotcutRandomizer.Data.Repositories;
 using Polly;
 using Polly.Retry;
-using CheapShotcutRandomizer.Services.RIFE;
-using CheapShotcutRandomizer.Services.RealESRGAN;
-using CheapShotcutRandomizer.Services.RealCUGAN;
 using CheapShotcutRandomizer.Services.Utilities;
+using CheapHelpers.MediaProcessing.Services;
 
 namespace CheapShotcutRandomizer.Services.Queue;
 

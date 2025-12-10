@@ -15,9 +15,14 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.0" />
     <PackageReference Include="MudBlazor" Version="8.15.0" />
     <PackageReference Include="CheapHelpers" Version="1.1.5" />
-    <PackageReference Include="FFMpegCore" Version="5.2.0" />
+    <PackageReference Include="FFMpegCore" Version="5.4.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared media processing services (during development) -->
+    <ProjectReference Include="..\..\CheapHelpers\CheapHelpers.MediaProcessing\CheapHelpers.MediaProcessing.csproj" />
   </ItemGroup>
 
 </Project>

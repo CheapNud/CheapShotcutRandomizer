@@ -2,6 +2,7 @@ namespace CheapShotcutRandomizer.Core.Models;
 
 /// <summary>
 /// Settings for RIFE frame interpolation
+/// Kept minimal in Core for RenderJob compatibility
 /// </summary>
 public class RifeSettings
 {

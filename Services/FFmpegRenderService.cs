@@ -1,6 +1,7 @@
 using FFMpegCore;
 using FFMpegCore.Enums;
 using System.Diagnostics;
+using CheapHelpers.MediaProcessing.Services;
 
 namespace CheapShotcutRandomizer.Services;
 

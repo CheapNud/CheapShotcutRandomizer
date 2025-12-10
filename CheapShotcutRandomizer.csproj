@@ -65,6 +65,8 @@
 
   <ItemGroup>
     <ProjectReference Include="CheapShotcutRandomizer.Core\CheapShotcutRandomizer.Core.csproj" />
+    <!-- Shared media processing services (during development, will be NuGet package on publish) -->
+    <ProjectReference Include="..\CheapHelpers\CheapHelpers.MediaProcessing\CheapHelpers.MediaProcessing.csproj" />
   </ItemGroup>
 
   <ItemGroup>
