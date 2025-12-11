@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using CheapShotcutRandomizer.Models;
+using CheapShotcutRandomizer.Core.Models;
 
 namespace CheapShotcutRandomizer.Services.Utilities;
 
@@ -21,7 +21,7 @@ public static class DebugLogger
             if (File.Exists(settingsPath))
             {
                 var json = File.ReadAllText(settingsPath);
-                return System.Text.Json.JsonSerializer.Deserialize<Models.AppSettings>(json);
+                return System.Text.Json.JsonSerializer.Deserialize<AppSettings>(json);
             }
         }
         catch

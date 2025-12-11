@@ -1,4 +1,4 @@
-using CheapShotcutRandomizer.Models;
+using CheapShotcutRandomizer.Core.Models;
 using FluentAssertions;
 
 namespace CheapShotcutRandomizer.Tests.Models;

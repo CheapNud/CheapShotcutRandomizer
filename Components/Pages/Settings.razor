@@ -990,24 +990,7 @@ else
             InstallAction = () => InstallVsMLRT()
         });
 
-        // Optional
-        var rifePath = ExecutableDetection.DetectRife(_settings.RifePath);
-        var rifeSource = rifePath != null && rifePath.Contains("SVP") ? "SVP (TensorRT)" :
-                        rifePath != null ? "Standalone" : null;
-        dependencies.Add(new DependencyStatusItem
-        {
-            Category = "Optional",
-            Name = "RIFE Frame Interpolation",
-            Description = "Advanced frame interpolation (best via SVP)",
-            IsInstalled = rifePath != null || (_svpInstallation?.IsInstalled ?? false),
-            IsRequired = false,
-            CanAutoInstall = false,
-            VersionOrPath = rifeSource ?? (_svpInstallation?.IsInstalled == true ? "SVP Detected" : null),
-            DownloadUrl = "https://www.svp-team.com/get/",
-            CustomPathProperty = "RifePath",
-            CustomPathValue = _settings.RifePath,
-            BrowseFileType = FileType.Rife
-        });
+        // Note: RIFE Frame Interpolation has been moved to CheapUpscaler
 
         _dependencyStatus = dependencies;
         StateHasChanged();

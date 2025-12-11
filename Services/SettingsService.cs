@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Diagnostics;
-using CheapShotcutRandomizer.Models;
+using CheapShotcutRandomizer.Core.Models;
 using CheapHelpers.MediaProcessing.Services;
 
 namespace CheapShotcutRandomizer.Services;

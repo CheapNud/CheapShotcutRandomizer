@@ -1035,40 +1035,8 @@
             };
         }
 
-        if (_useRealCugan)
-        {
-            var cuganOptions = new RealCuganOptions
-            {
-                Noise = _cuganNoise,
-                Scale = _cuganScale,
-                UseFp16 = _cuganUseFp16,
-                Backend = _cuganBackend,
-                NumStreams = _cuganNumStreams,
-                GpuId = _appSettings?.DefaultEsrganGpuId ?? 0
-            };
-
-            renderJob.RealCuganOptionsJson = System.Text.Json.JsonSerializer.Serialize(cuganOptions);
-        }
-
-        if (_useRealEsrgan)
-        {
-            var esrganOptions = new RealEsrganOptions
-            {
-                ModelName = _esrganModelName,
-                ScaleFactor = _esrganScaleFactor,
-                TileSize = _esrganTileSize,
-                TileMode = _esrganTileMode,
-                UseFp16 = _esrganUseFp16,
-                GpuId = _appSettings?.DefaultEsrganGpuId ?? 0,
-                TilePad = 10,
-                NumThreads = 1,
-                EnableDenoising = false,
-                DenoisingStrength = 0.5f,
-                TargetHeight = 0
-            };
-
-            renderJob.RealEsrganOptionsJson = System.Text.Json.JsonSerializer.Serialize(esrganOptions);
-        }
+        // Note: Real-CUGAN and Real-ESRGAN upscaling has been moved to CheapUpscaler
+        // The rendered output can be used as input to CheapUpscaler for AI processing
 
         // Serialize render settings based on what's configured
         if (_isMltSource && _useRifeInterpolation)

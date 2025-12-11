@@ -1,5 +1,6 @@
-using CheapShotcutRandomizer.Models;
+using CheapShotcutRandomizer.Core.Models;
 using CheapShotcutRandomizer.Services;
+using CheapHelpers.MediaProcessing.Services;
 using FluentAssertions;
 using Moq;
 

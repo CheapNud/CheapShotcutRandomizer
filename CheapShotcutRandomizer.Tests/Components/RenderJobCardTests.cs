@@ -1,5 +1,6 @@
 using Bunit;
 using CheapShotcutRandomizer.Components.Shared;
+using CheapShotcutRandomizer.Core.Models;
 using CheapShotcutRandomizer.Models;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;

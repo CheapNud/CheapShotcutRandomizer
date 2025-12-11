@@ -1,4 +1,4 @@
-using CheapShotcutRandomizer.Models;
+using CheapShotcutRandomizer.Core.Models;
 
 namespace CheapShotcutRandomizer.Services;
 
