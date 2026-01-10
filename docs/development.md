@@ -2,6 +2,8 @@
 
 Internal architecture and implementation details.
 
+> **Note:** AI upscaling and frame interpolation features have been moved to [CheapUpscaler](https://github.com/CheapNud/CheapUpscaler).
+
 ---
 
 ## Architecture Overview
@@ -12,32 +14,18 @@ Internal architecture and implementation details.
 
 ### Core Services
 
-1. **MeltRenderService** - MLT/Shotcut project rendering (CPU multi-threading)
-2. **FFmpegRenderService** - Video encoding with NVENC hardware acceleration
-3. **RifeInterpolationService** - AI frame interpolation via VapourSynth
-4. **RealEsrganService** - AI upscaling via VapourSynth
-5. **RenderQueueService** - Background job queue with persistence
+1. **MeltRenderService** - MLT/Shotcut project rendering
+2. **RenderQueueService** - Background job queue with persistence
 
 ### Processing Pipeline
 
 ```
-Source File
+Source File (.mlt)
     ↓
-[Step 1: MLT Render] (if .mlt source)
-    ↓ (IntermediatePath)
-[Step 2: RIFE Interpolation] (if enabled)
-    ↓ (OutputPath or IntermediatePath2)
-[Step 3: Real-ESRGAN Upscaling] (if enabled)
+[MLT Render via Melt]
     ↓
-Final Output
+Final Output (.mp4)
 ```
-
-**Flags:**
-- `RenderType` - `MltSource` or `VideoSource` (auto-detected from file extension)
-- `UseRifeInterpolation` - Boolean checkbox
-- `UseRealEsrgan` - Boolean checkbox
-- `IsTwoStageRender` - True for any 2-stage combination
-- `IsThreeStageRender` - True for MLT → RIFE → ESRGAN
 
 ---
 
@@ -57,7 +45,7 @@ Final Output
 3. Channel<T>.Writer signals new job
 4. BackgroundService picks up job
 5. Job status: Pending → Running
-6. Execute pipeline (MLT/RIFE/ESRGAN)
+6. Execute MLT render
 7. Progress events → Blazor UI (via EventCallback)
 8. Job status: Running → Completed/Failed
 9. Retry logic on failure (max 3 retries)
@@ -73,44 +61,6 @@ On startup, the service:
 
 ---
 
-## VapourSynth Integration
-
-Both RIFE and Real-ESRGAN use VapourSynth for video processing.
-
-### Script Generation
-
-```csharp
-// C# generates Python script
-var script = $@"
-import vapoursynth as vs
-from vsrife import RIFE
-core = vs.core
-
-clip = core.bs.VideoSource(source=r'{inputPath}')
-clip = RIFE(clip, {multiplier}, 1.0, None, None, None, {modelId}, backend, ...)
-clip.set_output()
-";
-
-// Execute via vspipe.exe
-var process = new Process
-{
-    StartInfo = new ProcessStartInfo
-    {
-        FileName = "vspipe",
-        Arguments = $"--y4m - - < script.vpy | ffmpeg -i pipe: -c:v hevc_nvenc ...",
-        RedirectStandardOutput = true,
-        RedirectStandardError = true
-    }
-};
-```
-
-### Progress Tracking
-- vspipe outputs to stderr: `Frame 1234/5000 (24.68%)`
-- Regex pattern extracts frame numbers
-- Progress events throttled to 100ms (10 fps max) to prevent UI glitching
-
----
-
 ## Dependency Management
 
 Automated detection, validation, and installation of required tools via the DependencyChecker service and Dependency Manager UI.
@@ -120,8 +70,6 @@ Automated detection, validation, and installation of required tools via the Depe
 The `DependencyChecker` service (`Services/DependencyChecker.cs`) provides comprehensive dependency detection and validation:
 
 - **Automated Detection**: Integrates with ExecutableDetectionService and SvpDetectionService
-- **VapourSynthEnvironment Integration**: Reports actually-used Python and VapourSynth (not just PATH detection)
-- **SVP Python Detection**: Automatically detects SVP's bundled Python installation
 - **Real-time Validation**: Version checking, compatibility verification, path validation
 - **Detailed Status**: Provides installation paths, versions, and error messages
 
@@ -130,7 +78,6 @@ The `DependencyChecker` service (`Services/DependencyChecker.cs`) provides compr
 The Dependency Manager page (`Components/Pages/DependencyManager.razor`) provides a user-friendly interface:
 
 - **Status Dashboard**: Overall health percentage and summary
-- **Categorized View**: Required vs Optional dependencies
 - **One-click Installation**: "Install Missing" button for batch installation
 - **Individual Control**: Install or check each dependency separately
 - **Real-time Updates**: Progress tracking during installation
@@ -139,8 +86,7 @@ The Dependency Manager page (`Components/Pages/DependencyManager.razor`) provide
 1. **Check PATH** - Standard system executables
 2. **Check Registry** - Installed applications
 3. **Check Common Locations** - Hardcoded paths for known apps
-4. **SVP Detection** - Special logic for SVP 4 installation and Python
-5. **VapourSynth Environment** - Detects VapourSynth and Python via VapourSynthEnvironment service
+4. **SVP Detection** - Special logic for SVP 4 installation (for ffmpeg with NVENC)
 
 ### Installation Strategies
 1. **Chocolatey** - Package manager (requires admin)
@@ -154,40 +100,6 @@ The Dependency Manager page (`Components/Pages/DependencyManager.razor`) provide
 - FFmpeg (video encoding)
 - FFprobe (video analysis)
 - Melt (Shotcut rendering)
-
-**Optional:**
-- VapourSynth (RIFE + ESRGAN + Real-CUGAN)
-- VapourSynth Source Plugin (video loading: BestSource, L-SMASH, FFMS2)
-- SVP RIFE (TensorRT RIFE implementation)
-- Python 3.8-3.11 (for vsrealesrgan and vsmlrt, auto-detected from SVP if available)
-- Practical-RIFE (standalone RIFE)
-
----
-
-## Hardware Detection
-
-### GPU Detection
-- Query WMI: `SELECT * FROM Win32_VideoController`
-- Parse for NVIDIA/AMD/Intel
-- Check for NVENC availability (RTX cards)
-
-### CPU Detection
-- `Environment.ProcessorCount` for core count
-- Parse CPU model from WMI
-- Calculate optimal thread count
-
-### Recommendations
-```csharp
-// MLT: Always use CPU
-public bool UseMeltNvenc => false;
-
-// FFmpeg: Use NVENC if available
-public bool UseFFmpegNvenc => NvencAvailable && HasNvidiaGpu;
-
-// Thread counts
-public int MeltThreads => ProcessorCount; // All cores
-public int FFmpegThreads => 2; // Minimal (NVENC does the work)
-```
 
 ---
 
@@ -287,18 +199,6 @@ public void RenderJob_CalculatesProgressCorrectly()
 
 ## Key Learnings
 
-### MLT NVENC is Broken
-Agent research initially recommended NVENC for all encoding. **This was wrong for MLT.**
-- MLT's NVENC has single-threaded bottleneck
-- 2x SLOWER than CPU multi-threading on 12-core CPU
-- Use CPU for MLT, NVENC for FFmpeg only
-
-### VapourSynth Parameter Changes
-RIFE parameter syntax changed between versions:
-- Old: `RIFE(clip, tiles_w=None, tiles_h=None)` ❌
-- New: `RIFE(clip, multiplier, scale, None, None, None, ...)` ✅
-- SVP's helpers.py uses positional arguments
-
 ### Progress Throttling is Critical
 Without throttling:
 - 1000s of events per second
@@ -310,19 +210,14 @@ Without throttling:
 
 ## File Locations
 
-**Note:** All file paths listed below are relative to the project root: `C:\Users\Brech\source\repos\ShotcutRandomizer`
+**Note:** All file paths listed below are relative to the project root.
 
 ### Services
 - `Services/MeltRenderService.cs` - MLT rendering
-- `Services/FFmpegRenderService.cs` - Video encoding
-- `Services/RIFE/RifeInterpolationService.cs` - RIFE via VapourSynth
-- `Services/RealESRGAN/RealEsrganService.cs` - ESRGAN via VapourSynth
 - `Services/Queue/RenderQueueService.cs` - Background queue
-- `Services/HardwareDetectionService.cs` - GPU/CPU detection
 - `Services/ExecutableDetectionService.cs` - Dependency detection
 - `Services/DependencyChecker.cs` - Comprehensive dependency validation and status reporting
 - `Services/DependencyInstaller.cs` - Automated dependency installation
-- `Services/VapourSynth/VapourSynthEnvironment.cs` - VapourSynth and Python environment detection
 
 ### UI Components
 - `Components/Pages/RenderQueue.razor` - Main queue UI
@@ -354,19 +249,11 @@ CREATE TABLE RenderJobs (
     SourceVideoPath TEXT NOT NULL,
     OutputPath TEXT NOT NULL,
     RenderType INTEGER NOT NULL, -- 0=MltSource, 1=VideoSource
-    Status INTEGER NOT NULL, -- 0=Pending, 1=Running, 2=Completed, 3=Failed
-    UseRifeInterpolation INTEGER NOT NULL, -- Boolean
-    UseRealEsrgan INTEGER NOT NULL, -- Boolean
-    IsTwoStageRender INTEGER NOT NULL,
-    IsThreeStageRender INTEGER NOT NULL,
-    IntermediatePath TEXT,
-    IntermediatePath2 TEXT,
+    Status INTEGER NOT NULL, -- 0=Pending, 1=Running, 2=Completed, 3=Failed, 4=Paused
     RenderSettings TEXT NOT NULL, -- JSON
-    RealEsrganOptionsJson TEXT,
     ProgressPercentage REAL NOT NULL,
     CurrentFrame INTEGER NOT NULL,
     TotalFrames INTEGER,
-    CurrentStage TEXT,
     CreatedAt TEXT NOT NULL,
     StartedAt TEXT,
     CompletedAt TEXT,
@@ -386,4 +273,3 @@ When adding new features:
 2. Add progress reporting with 100ms throttle
 3. Write unit tests
 4. Update this documentation
-5. Test multi-stage pipelines (MLT→RIFE→ESRGAN)
