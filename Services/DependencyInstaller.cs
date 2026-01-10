@@ -9,6 +9,7 @@ namespace CheapShotcutRandomizer.Services;
 /// <summary>
 /// Handles automated installation of dependencies using various strategies
 /// Supports Chocolatey, portable installations, and guided manual installation
+/// MLT/Shotcut focused - AI dependencies have been moved to CheapUpscaler
 /// </summary>
 public class DependencyInstaller
 {
@@ -76,8 +77,7 @@ public class DependencyInstaller
         // Strategy priority:
         // 1. Portable (no admin needed, works everywhere)
         // 2. Chocolatey (if available and has admin)
-        // 3. Installer (if has admin)
-        // 4. Manual (fallback)
+        // 3. Manual (fallback)
 
         return dependencyType switch
         {
@@ -89,19 +89,8 @@ public class DependencyInstaller
                 ? InstallationStrategy.Chocolatey
                 : InstallationStrategy.Portable,
 
-            DependencyType.Python => hasChocolatey && hasAdminRights
-                ? InstallationStrategy.Chocolatey
-                : InstallationStrategy.Installer,
-
-            DependencyType.VapourSynth => hasAdminRights
-                ? InstallationStrategy.Installer
-                : InstallationStrategy.Manual,
-
-            // These require manual installation
+            // Melt requires manual installation via Shotcut
             DependencyType.Melt => InstallationStrategy.Manual,
-            DependencyType.SvpRife => InstallationStrategy.Manual,
-            DependencyType.VapourSynthSourcePlugin => InstallationStrategy.Manual,
-            DependencyType.PracticalRife => InstallationStrategy.Manual,
 
             _ => InstallationStrategy.Manual
         };
@@ -303,99 +292,13 @@ public class DependencyInstaller
     /// <summary>
     /// Install via downloaded installer
     /// </summary>
-    private async Task<InstallationResult> InstallViaInstallerAsync(
+    private Task<InstallationResult> InstallViaInstallerAsync(
         DependencyType dependencyType,
         CancellationToken cancellationToken)
     {
-        var installerUrl = GetInstallerDownloadUrl(dependencyType);
-        if (installerUrl == null)
-        {
-            return InstallationResult.CreateFailure(
-                InstallationStrategy.Installer,
-                $"No installer available for {dependencyType}"
-            );
-        }
-
-        try
-        {
-            ReportProgress(10, "Downloading installer...");
-
-            var installerFileName = Path.GetFileName(new Uri(installerUrl).LocalPath);
-            var installerPath = Path.Combine(Path.GetTempPath(), installerFileName);
-
-            // Download installer
-            using (var response = await _httpClient.GetAsync(installerUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
-            {
-                response.EnsureSuccessStatusCode();
-
-                var totalBytes = response.Content.Headers.ContentLength ?? 0;
-                var downloadedBytes = 0L;
-
-                await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                await using var fileStream = new FileStream(installerPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
-
-                var buffer = new byte[8192];
-                int bytesRead;
-
-                while ((bytesRead = await contentStream.ReadAsync(buffer, cancellationToken)) > 0)
-                {
-                    await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
-                    downloadedBytes += bytesRead;
-
-                    if (totalBytes > 0)
-                    {
-                        var progress = (int)(10 + (downloadedBytes * 60.0 / totalBytes));
-                        ReportProgress(progress, $"Downloading installer... {downloadedBytes / 1024 / 1024} MB / {totalBytes / 1024 / 1024} MB");
-                    }
-                }
-            }
-
-            ReportProgress(70, "Running installer...");
-
-            // Run installer with silent flags
-            var silentArgs = GetInstallerSilentArgs(dependencyType);
-            var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = installerPath,
-                    Arguments = silentArgs,
-                    UseShellExecute = true,
-                    Verb = "runas" // Request elevation
-                }
-            };
-
-            process.Start();
-            await process.WaitForExitAsync(cancellationToken);
-
-            if (process.ExitCode == 0)
-            {
-                ReportProgress(100, "Installation completed");
-                var result = InstallationResult.CreateSuccess(
-                    InstallationStrategy.Installer,
-                    $"{dependencyType} installed successfully",
-                    null
-                );
-                result.RequiresRestart = true;
-                return result;
-            }
-            else
-            {
-                return InstallationResult.CreateFailure(
-                    InstallationStrategy.Installer,
-                    $"Installer exited with code {process.ExitCode}"
-                );
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Installer installation failed: {ex.Message}");
-            return InstallationResult.CreateFailure(
-                InstallationStrategy.Installer,
-                "Failed to run installer",
-                ex.Message
-            );
-        }
+        // For MLT-focused dependencies, installers are not used
+        // Redirect to manual instructions
+        return Task.FromResult(ProvideManualInstructions(dependencyType));
     }
 
     /// <summary>
@@ -464,7 +367,6 @@ public class DependencyInstaller
         {
             DependencyType.FFmpeg => "ffmpeg",
             DependencyType.FFprobe => "ffmpeg", // FFprobe comes with FFmpeg
-            DependencyType.Python => "python",
             _ => null
         };
     }
@@ -479,26 +381,6 @@ public class DependencyInstaller
         };
     }
 
-    private string? GetInstallerDownloadUrl(DependencyType dependencyType)
-    {
-        return dependencyType switch
-        {
-            DependencyType.Python => "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe",
-            DependencyType.VapourSynth => "https://github.com/vapoursynth/vapoursynth/releases/latest", // Needs to be parsed
-            _ => null
-        };
-    }
-
-    private string GetInstallerSilentArgs(DependencyType dependencyType)
-    {
-        return dependencyType switch
-        {
-            DependencyType.Python => "/quiet InstallAllUsers=1 PrependPath=1",
-            DependencyType.VapourSynth => "/S", // NSIS silent install
-            _ => "/S"
-        };
-    }
-
     private string? GetDownloadUrl(DependencyType dependencyType)
     {
         return dependencyType switch
@@ -506,11 +388,6 @@ public class DependencyInstaller
             DependencyType.FFmpeg => "https://www.gyan.dev/ffmpeg/builds/",
             DependencyType.FFprobe => "https://www.gyan.dev/ffmpeg/builds/",
             DependencyType.Melt => "https://shotcut.org/download/",
-            DependencyType.VapourSynth => "https://github.com/vapoursynth/vapoursynth/releases",
-            DependencyType.VapourSynthSourcePlugin => "https://github.com/vapoursynth/bestsource/releases",
-            DependencyType.SvpRife => "https://www.svp-team.com/get/",
-            DependencyType.Python => "https://www.python.org/downloads/",
-            DependencyType.PracticalRife => "https://github.com/hzwer/Practical-RIFE",
             _ => null
         };
     }
@@ -519,11 +396,9 @@ public class DependencyInstaller
     {
         return dependencyType switch
         {
+            DependencyType.FFmpeg => "Download FFmpeg from https://www.gyan.dev/ffmpeg/builds/\nExtract the archive and add the bin folder to your PATH.",
+            DependencyType.FFprobe => "FFprobe is included with FFmpeg. Install FFmpeg to get FFprobe.",
             DependencyType.Melt => "Install Shotcut from https://shotcut.org/download/\nShotcut includes the 'melt' executable required for rendering projects.",
-            DependencyType.VapourSynth => "Download and run the VapourSynth installer.\nIt will add 'vspipe' to your system PATH automatically.",
-            DependencyType.VapourSynthSourcePlugin => "Download BestSource.dll from the releases page.\nCopy it to: C:\\Program Files\\VapourSynth\\plugins\\",
-            DependencyType.SvpRife => "Install SVP 4 Pro and select the 'RIFE AI engine' component during installation.\nAlso install VapourSynth separately.",
-            DependencyType.PracticalRife => "Clone the repository: git clone https://github.com/hzwer/Practical-RIFE.git\nInstall dependencies: pip install torch torchvision opencv-python numpy",
             _ => $"Please install {dependencyType} manually."
         };
     }
@@ -534,6 +409,7 @@ public class DependencyInstaller
         {
             DependencyType.FFmpeg => new[] { "ffmpeg.exe" },
             DependencyType.FFprobe => new[] { "ffprobe.exe" },
+            DependencyType.Melt => new[] { "melt.exe" },
             _ => Array.Empty<string>()
         };
 

@@ -6,6 +6,7 @@ namespace CheapShotcutRandomizer.Tests.Models;
 /// <summary>
 /// Unit tests for RenderJob model
 /// Tests cover property initialization, file size formatting, timecode conversion, and helper methods
+/// MLT/Shotcut focused - AI-related tests moved to CheapUpscaler
 /// </summary>
 public class RenderJobTests
 {
@@ -25,7 +26,6 @@ public class RenderJobTests
         renderJob.RetryCount.Should().Be(0);
         renderJob.MaxRetries.Should().Be(3);
         renderJob.FrameRate.Should().Be(30.0);
-        renderJob.IsTwoStageRender.Should().BeFalse();
     }
 
     [Fact]
@@ -136,38 +136,6 @@ public class RenderJobTests
     }
 
     [Fact]
-    public void GetIntermediateFileSizeFormatted_Returns_NA_When_Null()
-    {
-        // Arrange
-        var renderJob = new RenderJob
-        {
-            IntermediateFileSizeBytes = null
-        };
-
-        // Act
-        var formatted = renderJob.GetIntermediateFileSizeFormatted();
-
-        // Assert
-        formatted.Should().Be("N/A");
-    }
-
-    [Fact]
-    public void GetIntermediateFileSizeFormatted_Formats_Size_Correctly()
-    {
-        // Arrange
-        var renderJob = new RenderJob
-        {
-            IntermediateFileSizeBytes = 1024L * 1024L * 500 // 500 MB
-        };
-
-        // Act
-        var formatted = renderJob.GetIntermediateFileSizeFormatted();
-
-        // Assert
-        formatted.Should().Be("500.00 MB");
-    }
-
-    [Fact]
     public void FramesToTimecode_Converts_30fps_Correctly()
     {
         // Arrange
@@ -245,23 +213,6 @@ public class RenderJobTests
 
         // Assert
         timecode.Should().Be("00:00:00.000");
-    }
-
-    [Fact]
-    public void RenderJob_Supports_Two_Stage_Rendering()
-    {
-        // Arrange & Act
-        var renderJob = new RenderJob
-        {
-            IsTwoStageRender = true,
-            IntermediatePath = @"C:\Temp\intermediate.mp4",
-            CurrentStage = "Stage 1: MLT Render"
-        };
-
-        // Assert
-        renderJob.IsTwoStageRender.Should().BeTrue();
-        renderJob.IntermediatePath.Should().Be(@"C:\Temp\intermediate.mp4");
-        renderJob.CurrentStage.Should().Be("Stage 1: MLT Render");
     }
 
     [Fact]

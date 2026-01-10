@@ -12,7 +12,7 @@
             {
                 <MudText Typo="Typo.h5" GutterBottom="true">Welcome to ShotcutRandomizer!</MudText>
                 <MudText Typo="Typo.body1" Class="mb-4">
-                    This wizard will help you set up the required dependencies for video processing and frame interpolation.
+                    This wizard will help you set up the required dependencies for rendering Shotcut/MLT projects.
                 </MudText>
                 <MudText Typo="Typo.body1" Class="mb-2">
                     We'll check for:
@@ -21,8 +21,6 @@
                     <MudListItem T="string" Icon="@Icons.Material.Filled.Check">FFmpeg - Video encoding/decoding</MudListItem>
                     <MudListItem T="string" Icon="@Icons.Material.Filled.Check">FFprobe - Video analysis</MudListItem>
                     <MudListItem T="string" Icon="@Icons.Material.Filled.Check">Shotcut Melt - Project rendering</MudListItem>
-                    <MudListItem T="string" Icon="@Icons.Material.Filled.Extension">VapourSynth - Advanced video processing (optional)</MudListItem>
-                    <MudListItem T="string" Icon="@Icons.Material.Filled.Extension">RIFE - AI frame interpolation (optional)</MudListItem>
                 </MudList>
             }
             else if (_currentStep == WizardStep.Checking)

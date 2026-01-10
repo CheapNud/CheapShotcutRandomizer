@@ -5,6 +5,7 @@ namespace CheapShotcutRandomizer.Core.Models;
 
 /// <summary>
 /// Represents a video render job in the queue
+/// MLT/Shotcut focused - AI upscaling has been moved to CheapUpscaler
 /// </summary>
 public class RenderJob
 {
@@ -101,12 +102,6 @@ public class RenderJob
     public FFmpegRenderSettings? FFmpegSettings { get; set; }
 
     /// <summary>
-    /// RIFE-specific settings (nullable)
-    /// NOT MAPPED to database - use RenderSettings JSON property instead
-    /// </summary>
-    public RifeSettings? RifeSettings { get; set; }
-
-    /// <summary>
     /// Number of times this job has been retried
     /// </summary>
     public int RetryCount { get; set; }
@@ -167,97 +162,9 @@ public class RenderJob
     public double FrameRate { get; set; } = 30.0;
 
     /// <summary>
-    /// Indicates this is a two-stage render job (MLT to temp video to RIFE interpolation)
-    /// When true, the source is an MLT file that needs to be rendered before RIFE processing
-    /// </summary>
-    public bool IsTwoStageRender { get; set; } = false;
-
-    /// <summary>
-    /// Indicates this is a three-stage render job (MLT to RIFE to Real-ESRGAN)
-    /// When true, applies both frame interpolation and AI upscaling
-    /// </summary>
-    public bool IsThreeStageRender { get; set; } = false;
-
-    /// <summary>
-    /// Path to the intermediate/temporary file for two-stage renders
-    /// Used when rendering MLT to temp file to RIFE
-    /// </summary>
-    public string? IntermediatePath { get; set; }
-
-    /// <summary>
-    /// Path to the second intermediate file for three-stage renders
-    /// Used when rendering MLT to RIFE to temp file to Real-ESRGAN
-    /// </summary>
-    public string? IntermediatePath2 { get; set; }
-
-    /// <summary>
     /// Size of the output file in bytes (null if not yet rendered)
     /// </summary>
     public long? OutputFileSizeBytes { get; set; }
-
-    /// <summary>
-    /// Size of the intermediate file in bytes for two-stage renders (null if not applicable)
-    /// </summary>
-    public long? IntermediateFileSizeBytes { get; set; }
-
-    /// <summary>
-    /// Size of the second intermediate file in bytes for three-stage renders (null if not applicable)
-    /// </summary>
-    public long? IntermediateFileSizeBytes2 { get; set; }
-
-    /// <summary>
-    /// Current stage for two-stage renders (e.g., "Stage 1: MLT Render", "Stage 2: RIFE Interpolation")
-    /// For three-stage: "Stage 1: MLT Render", "Stage 2: RIFE Interpolation", "Stage 3: Real-ESRGAN Upscaling"
-    /// </summary>
-    public string? CurrentStage { get; set; }
-
-    /// <summary>
-    /// Enable RIFE frame interpolation
-    /// </summary>
-    public bool UseRifeInterpolation { get; set; } = false;
-
-    /// <summary>
-    /// Enable Real-ESRGAN AI upscaling
-    /// </summary>
-    public bool UseRealEsrgan { get; set; } = false;
-
-    /// <summary>
-    /// Serialized JSON of Real-ESRGAN settings
-    /// </summary>
-    public string? RealEsrganOptionsJson { get; set; }
-
-    /// <summary>
-    /// Enable Real-CUGAN AI upscaling (10-13x faster than Real-ESRGAN)
-    /// Optimized for anime/cartoon content
-    /// </summary>
-    public bool UseRealCugan { get; set; } = false;
-
-    /// <summary>
-    /// Serialized JSON of Real-CUGAN settings
-    /// </summary>
-    public string? RealCuganOptionsJson { get; set; }
-
-    /// <summary>
-    /// Target upscale resolution (height in pixels)
-    /// 0 = disabled, 1440, 2160, 3840, 4320, etc.
-    /// </summary>
-    public int TargetUpscaleResolution { get; set; } = 0;
-
-    /// <summary>
-    /// Enable non-AI upscaling (xBR, Lanczos, HQx)
-    /// Fast alternatives to Real-ESRGAN (seconds vs hours)
-    /// </summary>
-    public bool UseNonAiUpscaling { get; set; } = false;
-
-    /// <summary>
-    /// Non-AI upscaling algorithm (xbr, lanczos, hqx)
-    /// </summary>
-    public string? NonAiUpscalingAlgorithm { get; set; }
-
-    /// <summary>
-    /// Non-AI upscaling scale factor (2, 3, or 4)
-    /// </summary>
-    public int NonAiUpscalingScaleFactor { get; set; } = 2;
 
     /// <summary>
     /// Get human-readable file size string (e.g., "1.5 GB", "250 MB")
@@ -268,17 +175,6 @@ public class RenderJob
             return "N/A";
 
         return FormatFileSize(OutputFileSizeBytes.Value);
-    }
-
-    /// <summary>
-    /// Get human-readable intermediate file size string
-    /// </summary>
-    public string GetIntermediateFileSizeFormatted()
-    {
-        if (!IntermediateFileSizeBytes.HasValue)
-            return "N/A";
-
-        return FormatFileSize(IntermediateFileSizeBytes.Value);
     }
 
     /// <summary>

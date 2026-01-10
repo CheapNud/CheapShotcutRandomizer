@@ -1159,47 +1159,7 @@ except Exception as e:
 
     private async Task BrowseForFile(FileType fileType)
     {
-        // Special handling for RIFE folder selection
-        if (fileType == FileType.Rife)
-        {
-            // For now, use file dialog and ask user to select any file in the RIFE folder
-            // In the future, this should use a folder browser dialog
-            var rifeOptions = new CheapAvaloniaBlazor.Models.FileDialogOptions
-            {
-                Title = "Select any file in the RIFE folder (e.g., inference_video.py or rife.dll)",
-                Filters = new List<CheapAvaloniaBlazor.Models.FileFilter>
-                {
-                    new() { Name = "RIFE Files", Extensions = new[] { "*.py", "*.dll" } },
-                    new() { Name = "All Files", Extensions = new[] { "*.*" } }
-                }
-            };
-
-            try
-            {
-                var selectedFile = await DesktopInterop.OpenFileDialogAsync(rifeOptions);
-
-                if (!string.IsNullOrEmpty(selectedFile))
-                {
-                    // Extract the folder from the file path
-                    var folderPath = Path.GetDirectoryName(selectedFile);
-                    if (!string.IsNullOrEmpty(folderPath))
-                    {
-                        _settings!.RifePath = folderPath;
-                        Snackbar.Add($"RIFE folder set to: {Path.GetFileName(folderPath)}", Severity.Success);
-                        LogVerbose($"Selected RIFE folder: {folderPath}");
-                        StateHasChanged();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Error selecting RIFE folder: {ex.Message}", Severity.Error);
-                LogVerbose($"Error in BrowseForFile (RIFE): {ex}");
-            }
-            return;
-        }
-
-        // Normal file selection for other executables
+        // File selection for executables
         var (title, filters, settingProperty) = fileType switch
         {
             FileType.FFmpeg => (
@@ -1278,7 +1238,6 @@ except Exception as e:
             "FFmpegPath" => _settings.FFmpegPath,
             "FFprobePath" => _settings.FFprobePath,
             "MeltPath" => _settings.MeltPath,
-            "RifePath" => _settings.RifePath,
             _ => dependency.CustomPathValue
         };
 

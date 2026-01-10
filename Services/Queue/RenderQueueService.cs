@@ -504,67 +504,12 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
             renderJob.ProcessId = Environment.ProcessId;
             renderJob.MachineName = Environment.MachineName;
 
-            // Set initial stage for multi-stage renders
-            // Pipeline order: MLT → UPSCALING (AI or non-AI) → RIFE (upscaling before RIFE for performance!)
-            if (renderJob.IsThreeStageRender)
-            {
-                renderJob.CurrentStage = "Stage 1: MLT Render";
-            }
-            else if (renderJob.IsTwoStageRender)
-            {
-                if (renderJob.RenderType == RenderType.MltSource)
-                    renderJob.CurrentStage = "Stage 1: MLT Render";
-                else if (renderJob.UseRealCugan)
-                    renderJob.CurrentStage = "Stage 1: Real-CUGAN Upscaling";
-                else if (renderJob.UseRealEsrgan)
-                    renderJob.CurrentStage = "Stage 1: Real-ESRGAN Upscaling";
-                else if (renderJob.UseNonAiUpscaling)
-                    renderJob.CurrentStage = "Stage 1: Non-AI Upscaling";
-                else
-                    renderJob.CurrentStage = "Stage 1: RIFE Interpolation";
-            }
-
             await repository.UpdateAsync(renderJob);
 
             FireStatusChanged(jobId, RenderJobStatus.Running, 0, 0);
 
-            // Execute render pipeline based on source type and processing options
-            // IMPORTANT: Upscaling (AI or non-AI) before RIFE to minimize frames processed
-            bool renderSuccess = true;
-
-            // Step 1: MLT Render (if source is MLT)
-            if (renderJob.RenderType == RenderType.MltSource)
-            {
-                renderSuccess = await ExecuteMltRenderAsync(renderJob, jobCts.Token, scope, jobId);
-                if (!renderSuccess) goto RenderComplete;
-            }
-
-            // Step 2: Upscaling (if enabled) - BEFORE RIFE to minimize frame count!
-            // Use either AI (Real-CUGAN, Real-ESRGAN) or Non-AI (xBR/Lanczos/HQx) upscaling
-            if (renderJob.UseRealCugan && renderSuccess)
-            {
-                renderSuccess = await ApplyRealCuganPostProcessingAsync(renderJob, jobCts.Token, scope, jobId);
-                if (!renderSuccess) goto RenderComplete;
-            }
-            else if (renderJob.UseRealEsrgan && renderSuccess)
-            {
-                renderSuccess = await ApplyRealEsrganPostProcessingAsync(renderJob, jobCts.Token, scope, jobId);
-                if (!renderSuccess) goto RenderComplete;
-            }
-            else if (renderJob.UseNonAiUpscaling && renderSuccess)
-            {
-                renderSuccess = await ApplyNonAiUpscalingPostProcessingAsync(renderJob, jobCts.Token, scope, jobId);
-                if (!renderSuccess) goto RenderComplete;
-            }
-
-            // Step 3: RIFE Interpolation (if enabled) - AFTER upscaling for optimal performance
-            if (renderJob.UseRifeInterpolation && renderSuccess)
-            {
-                // RIFE reads from upscaling output (IntermediatePath2) if upscaling ran, else from MLT or source
-                renderSuccess = await ExecuteRifeRenderAsync(renderJob, jobCts.Token, scope, jobId);
-            }
-
-        RenderComplete:
+            // Execute MLT render (single-stage pipeline)
+            bool renderSuccess = await ExecuteMltRenderAsync(renderJob, jobCts.Token, scope, jobId);
             // Update final status
             if (renderSuccess)
             {
@@ -679,18 +624,11 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
             xmlService: xmlService,
             shotcutService: shotcutService);
 
-        // Determine output path:
-        // - If RIFE/ESRGAN/CUGAN will run next: write to IntermediatePath
-        // - Otherwise: write directly to OutputPath
-        string mltOutputPath = (renderJob.UseRifeInterpolation || renderJob.UseRealEsrgan || renderJob.UseRealCugan)
-            ? renderJob.IntermediatePath ?? renderJob.OutputPath
-            : renderJob.OutputPath;
-
-        Debug.WriteLine($"MLT rendering to: {mltOutputPath}");
+        Debug.WriteLine($"MLT rendering to: {renderJob.OutputPath}");
 
         var success = await meltService.RenderAsync(
             renderJob.SourceVideoPath,
-            mltOutputPath,
+            renderJob.OutputPath,
             settings,
             progress,
             cancellationToken,
@@ -699,84 +637,7 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
             renderJob.SelectedVideoTracks,
             renderJob.SelectedAudioTracks);
 
-        // Update IntermediatePath if post-processing will run
-        if (success && (renderJob.UseRifeInterpolation || renderJob.UseRealEsrgan || renderJob.UseRealCugan))
-        {
-            renderJob.IntermediatePath = mltOutputPath;
-            Debug.WriteLine($"Set IntermediatePath for post-processing: {mltOutputPath}");
-        }
-
         return success;
-    }
-
-    private Task<bool> ExecuteRifeRenderAsync(
-        RenderJob renderJob,
-        CancellationToken cancellationToken,
-        IServiceScope scope,
-        Guid jobId)
-    {
-        // AI services have been moved to CheapUpscaler
-        throw new NotSupportedException("RIFE interpolation has been moved to CheapUpscaler. Use file-based handoff or CheapUpscaler directly.");
-    }
-
-    private Task<bool> ExecuteRealEsrganRenderAsync(
-        RenderJob renderJob,
-        CancellationToken cancellationToken,
-        IServiceScope scope,
-        Guid jobId)
-    {
-        // AI services have been moved to CheapUpscaler
-        throw new NotSupportedException("Real-ESRGAN upscaling has been moved to CheapUpscaler. Use file-based handoff or CheapUpscaler directly.");
-    }
-
-    private Task<bool> ApplyRealEsrganPostProcessingAsync(
-        RenderJob renderJob,
-        CancellationToken cancellationToken,
-        IServiceScope scope,
-        Guid jobId)
-    {
-        // AI services have been moved to CheapUpscaler
-        throw new NotSupportedException("Real-ESRGAN upscaling has been moved to CheapUpscaler. Use file-based handoff or CheapUpscaler directly.");
-    }
-
-    private Task<bool> ApplyNonAiUpscalingPostProcessingAsync(
-        RenderJob renderJob,
-        CancellationToken cancellationToken,
-        IServiceScope scope,
-        Guid jobId)
-    {
-        // AI services have been moved to CheapUpscaler
-        throw new NotSupportedException("Non-AI upscaling has been moved to CheapUpscaler. Use file-based handoff or CheapUpscaler directly.");
-    }
-
-    private Task<bool> ApplyRealCuganPostProcessingAsync(
-        RenderJob renderJob,
-        CancellationToken cancellationToken,
-        IServiceScope scope,
-        Guid jobId)
-    {
-        // AI services have been moved to CheapUpscaler
-        throw new NotSupportedException("Real-CUGAN upscaling has been moved to CheapUpscaler. Use file-based handoff or CheapUpscaler directly.");
-    }
-
-    private Task<bool> ExecuteTwoStageRenderAsync(
-        RenderJob renderJob,
-        CancellationToken cancellationToken,
-        IServiceScope scope,
-        Guid jobId)
-    {
-        // Multi-stage AI render pipelines have been moved to CheapUpscaler
-        throw new NotSupportedException("Two-stage render (MLT → RIFE) has been moved to CheapUpscaler. Use file-based handoff or CheapUpscaler directly.");
-    }
-
-    private Task<bool> ExecuteThreeStageRenderAsync(
-        RenderJob renderJob,
-        CancellationToken cancellationToken,
-        IServiceScope scope,
-        Guid jobId)
-    {
-        // Multi-stage AI render pipelines have been moved to CheapUpscaler
-        throw new NotSupportedException("Three-stage render (MLT → RIFE → Real-ESRGAN) has been moved to CheapUpscaler. Use file-based handoff or CheapUpscaler directly.");
     }
 
     private IProgress<RenderProgress> CreateRenderProgressReporter(Guid jobId)
