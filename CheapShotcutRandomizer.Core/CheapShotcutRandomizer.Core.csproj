@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Razor">
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -14,15 +14,11 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.1" />
     <PackageReference Include="MudBlazor" Version="8.15.0" />
-    <PackageReference Include="CheapHelpers" Version="1.1.5" />
+    <PackageReference Include="CheapHelpers" Version="1.2.0" />
+		<PackageReference Include="CheapHelpers.MediaProcessing" Version="1.2.0" />
     <PackageReference Include="FFMpegCore" Version="5.4.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.1" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- Shared media processing services (during development) -->
-    <ProjectReference Include="..\..\CheapHelpers\CheapHelpers.MediaProcessing\CheapHelpers.MediaProcessing.csproj" />
   </ItemGroup>
 
 </Project>
