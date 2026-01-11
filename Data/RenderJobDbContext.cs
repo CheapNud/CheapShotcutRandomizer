@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using CheapShotcutRandomizer.Models;
+using CheapShotcutRandomizer.Core.Models;
 
 namespace CheapShotcutRandomizer.Data;
 
@@ -38,7 +38,6 @@ public class RenderJobDbContext(DbContextOptions<RenderJobDbContext> options) : 
             // Ignore complex properties (not stored in database)
             entity.Ignore(e => e.MeltSettings);
             entity.Ignore(e => e.FFmpegSettings);
-            entity.Ignore(e => e.RifeSettings);
 
             // Unique index on JobId for fast lookups
             entity.HasIndex(e => e.JobId)
@@ -76,15 +75,6 @@ public class RenderJobDbContext(DbContextOptions<RenderJobDbContext> options) : 
 
             entity.Property(e => e.SelectedAudioTracks)
                 .HasMaxLength(200);
-
-            entity.Property(e => e.CurrentStage)
-                .HasMaxLength(100);
-
-            entity.Property(e => e.RealEsrganOptionsJson)
-                .HasMaxLength(2000);
-
-            entity.Property(e => e.IntermediatePath2)
-                .HasMaxLength(500);
 
             // In/Out points for partial rendering (nullable)
             entity.Property(e => e.InPoint);

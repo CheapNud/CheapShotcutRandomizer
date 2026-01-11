@@ -1,6 +1,8 @@
 # Cheap Shotcut Randomizer
 
-Desktop app for randomizing and generating optimized Shotcut video project playlists using simulated annealing algorithms, with AI-powered frame interpolation and upscaling.
+Desktop app for randomizing and generating optimized Shotcut video project playlists using simulated annealing algorithms.
+
+> **Note:** AI upscaling and frame interpolation features have been moved to [CheapUpscaler](https://github.com/CheapNud/CheapUpscaler).
 
 ## Features
 
@@ -10,53 +12,20 @@ Desktop app for randomizing and generating optimized Shotcut video project playl
 - **Advanced Controls** - Fine-tune selection with duration and clip count weights
 - **Non-Destructive** - Original projects are never modified
 
-### Video Processing Pipeline
-- **Three-Stage Rendering** - MLT → RIFE → Upscale pipeline with automatic intermediate file management
+### MLT/Shotcut Rendering
+- **Melt Integration** - Render Shotcut projects directly via melt
 - **Multi-track Support** - Select specific video and audio tracks for rendering
+- **In/Out Points** - Render specific ranges using Shotcut markers
 - **Background Queue** - Queue multiple render jobs with persistent SQLite storage
 - **Crash Recovery** - Resume interrupted jobs automatically on startup
 
-### AI Upscaling
-- **Real-CUGAN** - Anime/cartoon optimized upscaling (10-13x faster than ESRGAN)
-  - TensorRT acceleration support
-  - 10-20 fps processing on RTX 3080
-  - Multiple denoising levels
-  - 2x, 3x, 4x scaling
-- **Real-ESRGAN** - Photorealistic content upscaling
-  - Multiple model options (general, anime, v3)
-  - FP16 mode for 50% speed boost
-  - Tile mode for low VRAM systems
-  - 720p → 1440p/4K upscaling
-
-### Non-AI Upscaling
-- **Ultra-Fast Alternatives** - Near real-time processing (100x faster than AI)
-- **xBR** - Pattern-recognition based, great for anime and sharp edges
-- **Lanczos** - Traditional resampling, smooth results for general content
-- **HQx** - High-quality magnification for pixel art and sprites
-- **Scale Factors** - 2x, 3x, or 4x upscaling
-
-### Frame Interpolation
-- **RIFE AI** - Advanced frame interpolation (24fps → 60fps+)
-- **SVP Integration** - TensorRT-accelerated RIFE via SVP 4 Pro
-- **Multiple Models** - 4.6 to 4.26, lite variants, UHD, and anime-specific models
-- **Practical-RIFE** - Standalone Python implementation support
-
 ### Dependency Management
-- **DependencyChecker Service** - Automated detection and validation of all external dependencies
-- **Dependency Manager UI** - Built-in page for checking and installing dependencies
-- **Auto-Detection** - Automatic detection of installed tools (FFmpeg, melt, VapourSynth)
-- **SVP Python Detection** - Automatically detects and uses SVP's bundled Python installation
-- **Installation Wizard** - Guided installation for RIFE, Real-ESRGAN, Real-CUGAN
-- **Strategy Selection** - Chocolatey, portable, installer, or manual installation options
-- **Real-time Validation** - Instant dependency status checking with detailed error messages
+- **Auto-Detection** - Automatic detection of FFmpeg, FFprobe, and Melt
+- **SVP Integration** - Detects SVP's bundled FFmpeg for optimal encoding
+- **Installation Options** - Chocolatey, portable, or manual installation
+- **First-Run Wizard** - Guided setup on first launch
 
 ## Usage
-
-### Getting Started: Check Dependencies
-1. **Navigate to Dependency Manager** - Check the Dependency Manager page on first launch
-2. **Review Status** - See which dependencies are installed and which are missing
-3. **Install Missing** - Use the automated installer or follow manual instructions
-4. **Verify** - Click "Refresh Status" to confirm all required dependencies are installed
 
 ### Playlist Randomization
 1. **Load Project** - Select your `.mlt` Shotcut project file
@@ -71,16 +40,12 @@ Desktop app for randomizing and generating optimized Shotcut video project playl
 
 Output files: `OriginalName.Random[####].mlt`
 
-### Video Rendering & Processing
+### Video Rendering
 1. **Open Render Queue** - Navigate to Render Queue page
 2. **Add Job** - Click "Add Render Job"
-3. **Select Source** - Choose MLT project or video file
-4. **Configure Processing**:
-   - Enable RIFE interpolation (optional)
-   - Choose AI upscaling (Real-CUGAN/Real-ESRGAN) or Non-AI upscaling (xBR/Lanczos/HQx)
-   - Select scale factor and quality settings
+3. **Select Source** - Choose MLT project file
+4. **Configure Settings** - Codec, CRF, preset, track selection
 5. **Add to Queue** - Job processes automatically in background
-6. **Monitor Progress** - Real-time progress tracking with stage indicators
 
 ## Algorithm
 
@@ -91,90 +56,23 @@ Uses simulated annealing optimization to select the best combination of clips ba
 
 ## Requirements
 
-### Minimum
 - .NET 10.0
 - Windows 10/11
-- NVIDIA GTX 1060 (6GB) or equivalent
-- 8GB RAM
-- 4GB VRAM (with tiling)
-
-### Recommended
-- NVIDIA RTX 3060+ (8GB+)
-- 16GB RAM
-- 8GB+ VRAM
-- 6+ core CPU
-
-### Optional Dependencies
 - FFmpeg (video encoding)
-- Melt (Shotcut rendering)
-- VapourSynth (RIFE/AI upscaling)
-- Python 3.8-3.11 (AI upscaling)
-- SVP 4 Pro (TensorRT RIFE)
+- Melt (Shotcut rendering) - Install [Shotcut](https://shotcut.org/download/)
 
 ## Tech Stack
 
-- Blazor Server + Avalonia (CheapAvaloniaBlazor)
+- Blazor Server + Avalonia ([CheapAvaloniaBlazor](https://github.com/CheapNud/CheapAvaloniaBlazor))
 - MudBlazor UI components
 - Entity Framework Core + SQLite (job persistence)
-- VapourSynth (video processing framework)
 - FFmpeg (video encoding/decoding)
-- CheapHelpers.Services (XML serialization)
+- CheapHelpers (utilities)
 
-## Documentation
+## Related Projects
 
-**Complete documentation is available at [docs/README.md](docs/README.md)**
-
-### User Guides
-- [Installation Guide](docs/installation.md) - Setup RIFE, Real-ESRGAN, Real-CUGAN, and all dependencies
-- [Hardware Guide](docs/hardware.md) - Hardware acceleration, NVENC, performance tuning
-
-### Feature Documentation
-- [RIFE Frame Interpolation](docs/features/rife.md) - AI-powered frame interpolation
-- [Real-CUGAN AI Upscaling](docs/features/real-cugan.md) - Anime/cartoon optimized upscaling
-- [Real-ESRGAN AI Upscaling](docs/features/real-esrgan.md) - Photorealistic content upscaling
-- [Non-AI Upscaling](docs/features/non-ai-upscaling.md) - Ultra-fast alternatives
-- [VapourSynth Setup](docs/features/vapoursynth.md) - Video processing framework
-
-### Developer Documentation
-- [Development Documentation](docs/development.md) - Architecture, implementation details, system design
-- [Graceful Shutdown Architecture](docs/architecture/graceful-shutdown.md) - Task cancellation patterns
-- [Test Documentation](CheapShotcutRandomizer.Tests/README.md) - Unit testing architecture
-
-### Performance Benchmarks
-**RTX 3080 (10GB VRAM) Processing Times:**
-- RIFE 30→60fps (1080p): ~120 fps
-- Real-CUGAN 720p→1440p: 10-20 fps (3-6 min per min of video)
-- Real-ESRGAN 720p→1440p: 0.5-1 fps (30+ min per min of video)
-- Non-AI xBR/Lanczos: Near real-time (6-18 sec per min of video)
-
-**Complete Pipeline (1-minute video on RTX 3080):**
-- MLT render only: ~30s
-- MLT + RIFE: ~11min
-- MLT + Real-CUGAN: ~14min
-- MLT + RIFE + Real-CUGAN: ~25min
-
-## Troubleshooting
-
-### First Step: Check Dependency Manager
-1. Navigate to **Dependency Manager** in the application
-2. Click **"Refresh Status"** to re-check all dependencies
-3. Review status messages for each dependency
-4. Use **"Install Missing"** to fix missing dependencies automatically
-
-### Common Issues
-- **"vspipe not found"** - Check Dependency Manager for VapourSynth status, install if missing
-- **"No source plugin found"** - Check Dependency Manager for VapourSynth Source Plugin status
-- **"CUDA out of memory"** - Enable tile mode, reduce tile size, or enable FP16
-- **"Python not found"** - Check Dependency Manager - the app can detect SVP's Python automatically
-- **Slow processing** - Enable FP16 mode, increase tile size, use TensorRT backend
-
-See [Installation Guide](docs/installation.md) for detailed troubleshooting.
-
-
-<img width="2560" height="1392" alt="Screenshot 2025-10-29 004043" src="https://github.com/user-attachments/assets/e397e070-b801-4944-902e-137f02600c12" />
-<img width="2560" height="1392" alt="Screenshot 2025-10-29 004124" src="https://github.com/user-attachments/assets/7c8ff3b0-8e0f-46d6-9f8c-ca5db8d650dd" />
-<img width="2560" height="1392" alt="Screenshot 2025-10-29 004150" src="https://github.com/user-attachments/assets/63c67d59-df0c-4510-a30e-874a8499778b" />
-<img width="2560" height="1392" alt="Screenshot 2025-10-29 004205" src="https://github.com/user-attachments/assets/75979177-8e33-452c-889e-79f4fea33b93" />
-<img width="2560" height="1392" alt="Screenshot 2025-10-29 004224" src="https://github.com/user-attachments/assets/7ac35fc4-2871-428b-bc7b-a423ec965f83" />
+- **[CheapUpscaler](https://github.com/CheapNud/CheapUpscaler)** - AI upscaling (Real-ESRGAN, Real-CUGAN) and frame interpolation (RIFE)
+- **[CheapAvaloniaBlazor](https://github.com/CheapNud/CheapAvaloniaBlazor)** - Cross-platform Blazor desktop framework
+- **[CheapHelpers](https://github.com/CheapNud/CheapHelpers)** - Shared utility library
 
 ---

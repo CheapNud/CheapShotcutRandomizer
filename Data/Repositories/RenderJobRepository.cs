@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using CheapShotcutRandomizer.Models;
+using CheapShotcutRandomizer.Core.Models;
 using System.Diagnostics;
 
 namespace CheapShotcutRandomizer.Data.Repositories;

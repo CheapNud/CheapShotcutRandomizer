@@ -1,4 +1,4 @@
-namespace CheapShotcutRandomizer.Models;
+namespace CheapShotcutRandomizer.Core.Models;
 
 /// <summary>
 /// Source file type for render job

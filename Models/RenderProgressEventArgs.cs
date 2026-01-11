@@ -1,3 +1,5 @@
+using CheapShotcutRandomizer.Core.Models;
+
 namespace CheapShotcutRandomizer.Models;
 
 /// <summary>

@@ -2,11 +2,11 @@ using CheapAvaloniaBlazor.Hosting;
 using CheapAvaloniaBlazor.Extensions;
 using CheapShotcutRandomizer.Services;
 using CheapShotcutRandomizer.Services.Queue;
-using CheapShotcutRandomizer.Services.VapourSynth;
 using CheapShotcutRandomizer.Services.Utilities;
 using CheapShotcutRandomizer.Data;
 using CheapShotcutRandomizer.Data.Repositories;
 using CheapHelpers.Services.DataExchange.Xml;
+using CheapHelpers.MediaProcessing.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -43,35 +43,11 @@ class Program
         builder.Services.AddSingleton<DependencyChecker>();
         builder.Services.AddSingleton<DependencyInstaller>();
 
-        // VapourSynth environment (Python + vspipe detection)
-        builder.Services.AddSingleton<IVapourSynthEnvironment, VapourSynthEnvironment>();
-
         // Video rendering services
         // FFmpegRenderService is Singleton to ensure FFMpegCore is configured once on startup
         builder.Services.AddSingleton<FFmpegRenderService>();
         builder.Services.AddScoped<MeltRenderService>();
         builder.Services.AddSingleton<HardwareDetectionService>();
-
-        // RIFE services
-        builder.Services.AddScoped<CheapShotcutRandomizer.Services.RIFE.RifeInterpolationService>(sp =>
-        {
-            var settingsService = sp.GetService<SettingsService>();
-            if (settingsService != null)
-            {
-                var settings = settingsService.LoadSettingsAsync().GetAwaiter().GetResult();
-                var rifePath = settings.RifePath ?? "";
-
-                // Auto-detect Python (handled in RifeInterpolationService constructor)
-                return new CheapShotcutRandomizer.Services.RIFE.RifeInterpolationService(rifePath);
-            }
-
-            return new CheapShotcutRandomizer.Services.RIFE.RifeInterpolationService();
-        });
-        builder.Services.AddScoped<CheapShotcutRandomizer.Services.RIFE.RifeVideoProcessingPipeline>();
-
-        // AI Upscaling services
-        builder.Services.AddScoped<CheapShotcutRandomizer.Services.RealESRGAN.RealEsrganService>();
-        builder.Services.AddScoped<CheapShotcutRandomizer.Services.RealCUGAN.RealCuganService>();
 
         // Utility services
         builder.Services.AddScoped<CheapShotcutRandomizer.Services.Utilities.VideoValidator>();

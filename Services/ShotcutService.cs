@@ -1,4 +1,4 @@
-using CheapShotcutRandomizer.Models;
+using CheapShotcutRandomizer.Core.Models;
 using CheapHelpers.Services.DataExchange.Xml;
 
 namespace CheapShotcutRandomizer.Services;

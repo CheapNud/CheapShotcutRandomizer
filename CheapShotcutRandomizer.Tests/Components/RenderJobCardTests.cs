@@ -1,5 +1,6 @@
 using Bunit;
 using CheapShotcutRandomizer.Components.Shared;
+using CheapShotcutRandomizer.Core.Models;
 using CheapShotcutRandomizer.Models;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
@@ -160,51 +161,7 @@ public class RenderJobCardTests : BunitContext, IAsyncLifetime
         component.Markup.Should().Contain("Resume");
     }
 
-    [Fact]
-    public void RenderJobCard_Shows_Two_Stage_Render_File_Sizes()
-    {
-        // Arrange
-        var renderJob = new RenderJob
-        {
-            JobId = Guid.NewGuid(),
-            SourceVideoPath = "twostage.mlt",
-            Status = RenderJobStatus.Completed,
-            IsTwoStageRender = true,
-            OutputFileSizeBytes = 1024L * 1024L * 500, // 500 MB
-            IntermediateFileSizeBytes = 1024L * 1024L * 300 // 300 MB
-        };
-
-        // Act
-        var component = Render<RenderJobCard>(parameters => parameters
-            .Add(p => p.Job, renderJob));
-
-        // Assert
-        component.Markup.Should().Contain("500.00 MB"); // Output file
-        component.Markup.Should().Contain("300.00 MB"); // Temp file
-        component.Markup.Should().Contain("Total:"); // Total size label
-    }
-
-    [Fact]
-    public void RenderJobCard_Shows_Current_Stage_For_Two_Stage_Render()
-    {
-        // Arrange
-        var renderJob = new RenderJob
-        {
-            JobId = Guid.NewGuid(),
-            SourceVideoPath = "twostage.mlt",
-            Status = RenderJobStatus.Running,
-            IsTwoStageRender = true,
-            CurrentStage = "Stage 2: RIFE Interpolation",
-            ProgressPercentage = 75.0
-        };
-
-        // Act
-        var component = Render<RenderJobCard>(parameters => parameters
-            .Add(p => p.Job, renderJob));
-
-        // Assert
-        component.Markup.Should().Contain("Stage 2: RIFE Interpolation");
-    }
+    // Multi-stage render tests removed - AI features moved to CheapUpscaler
 
     [Fact]
     public void RenderJobCard_Pause_Button_Fires_OnPause_Event()

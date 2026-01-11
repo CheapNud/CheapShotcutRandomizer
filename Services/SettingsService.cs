@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Diagnostics;
-using CheapShotcutRandomizer.Models;
+using CheapShotcutRandomizer.Core.Models;
+using CheapHelpers.MediaProcessing.Services;
 
 namespace CheapShotcutRandomizer.Services;
 
@@ -97,11 +98,6 @@ public class SettingsService(SvpDetectionService svpDetection)
         {
             // Critical: melt is required for rendering
             Debug.WriteLine("WARNING: Melt not found! Application will not be able to render.");
-        }
-
-        if (detected.RifePath != null)
-        {
-            defaultSettings.RifePath = detected.RifePath;
         }
 
         // Auto-select NVENC codec if available

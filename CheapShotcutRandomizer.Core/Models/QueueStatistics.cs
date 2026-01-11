@@ -1,4 +1,4 @@
-namespace CheapShotcutRandomizer.Models;
+namespace CheapShotcutRandomizer.Core.Models;
 
 /// <summary>
 /// Statistics about the render queue

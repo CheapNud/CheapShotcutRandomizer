@@ -27,31 +27,12 @@
                     <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Storage" Variant="Variant.Text">
                         Output: @Job.GetOutputFileSizeFormatted()
                     </MudChip>
-
-                    @if (Job.IsTwoStageRender && Job.IntermediateFileSizeBytes.HasValue)
-                    {
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Schedule" Variant="Variant.Text" Color="Color.Info">
-                            Temp: @Job.GetIntermediateFileSizeFormatted()
-                        </MudChip>
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Summarize" Variant="Variant.Text" Color="Color.Warning">
-                            Total: @FormatTotalSize()
-                        </MudChip>
-                    }
                 </MudStack>
             </MudItem>
         }
 
         @if (Job.Status == RenderJobStatus.Running)
         {
-            @if (!string.IsNullOrEmpty(Job.CurrentStage))
-            {
-                <MudItem xs="12">
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">
-                        @Job.CurrentStage
-                    </MudChip>
-                </MudItem>
-            }
-
             <MudItem xs="12">
                 @{
                     var currentProgress = GetSmoothedProgressPercentage();
@@ -345,25 +326,6 @@
         }
     }
 
-    private string FormatTotalSize()
-    {
-        if (!Job.OutputFileSizeBytes.HasValue || !Job.IntermediateFileSizeBytes.HasValue)
-            return "N/A";
-
-        var totalBytes = Job.OutputFileSizeBytes.Value + Job.IntermediateFileSizeBytes.Value;
-
-        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
-        double len = totalBytes;
-        int order = 0;
-
-        while (len >= 1024 && order < sizes.Length - 1)
-        {
-            order++;
-            len /= 1024;
-        }
-
-        return $"{len:F2} {sizes[order]}";
-    }
 
     protected override void OnParametersSet()
     {
@@ -426,13 +388,6 @@
             {
                 // Check output file size
                 var outputPath = Job.OutputPath;
-
-                // For two-stage renders, check the intermediate file if still in stage 1
-                if (Job.IsTwoStageRender && !string.IsNullOrEmpty(Job.IntermediatePath) &&
-                    Job.CurrentStage?.Contains("Stage 1") == true)
-                {
-                    outputPath = Job.IntermediatePath;
-                }
 
                 if (File.Exists(outputPath))
                 {

@@ -1,5 +1,6 @@
-using CheapShotcutRandomizer.Models;
+using CheapShotcutRandomizer.Core.Models;
 using CheapShotcutRandomizer.Services;
+using CheapHelpers.MediaProcessing.Services;
 using FluentAssertions;
 using Moq;
 
@@ -237,10 +238,6 @@ public class SettingsServiceTests : IDisposable
         settings.DefaultCodec.Should().Be("libx264");
         settings.DefaultCrf.Should().Be(23);
         settings.DefaultPreset.Should().Be("medium");
-        settings.DefaultRifeModel.Should().Be(46);
-        settings.DefaultRifeThreads.Should().Be(2);
-        settings.DefaultRifeUhdMode.Should().BeFalse();
-        settings.DefaultRifeTtaMode.Should().BeFalse();
     }
 
     [Fact]

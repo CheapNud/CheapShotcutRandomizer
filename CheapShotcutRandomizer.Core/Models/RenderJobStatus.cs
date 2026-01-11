@@ -1,4 +1,4 @@
-namespace CheapShotcutRandomizer.Models;
+namespace CheapShotcutRandomizer.Core.Models;
 
 /// <summary>
 /// Status of a render job in the queue

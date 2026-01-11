@@ -1,5 +1,5 @@
 using CheapShotcutRandomizer.Data.Repositories;
-using CheapShotcutRandomizer.Models;
+using CheapShotcutRandomizer.Core.Models;
 using CheapShotcutRandomizer.Services.Queue;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
