@@ -45,12 +45,12 @@
     <PackageReference Include="FFMpegCore" Version="5.4.0" />
 
     <!-- Hardware detection (WMI) -->
-    <PackageReference Include="System.Management" Version="10.0.1" />
+    <PackageReference Include="System.Management" Version="10.0.2" />
 
     <!-- Entity Framework Core for render queue database -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.1">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
