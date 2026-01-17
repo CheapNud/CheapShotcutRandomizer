@@ -565,13 +565,19 @@
     /// </summary>
     private async Task<string> SaveToTempFileAsync(Mlt project, string baseName)
     {
+        // Validate CurrentProjectPath is set
+        if (string.IsNullOrWhiteSpace(ProjectState.CurrentProjectPath))
+            throw new InvalidOperationException("Project path not set - cannot save generated MLT");
+
         // IMPORTANT: Save in same directory as source project to preserve relative paths
         // MLT files often reference media with relative paths - moving the MLT breaks these
-        var sourceDir = Path.GetDirectoryName(ProjectState.CurrentProjectPath) ?? Path.GetTempPath();
+        var sourceDir = Path.GetDirectoryName(ProjectState.CurrentProjectPath)
+            ?? throw new InvalidOperationException("Could not determine source directory");
 
-        // Sanitize baseName - remove invalid path characters
+        // Sanitize baseName - strip path components and remove invalid characters
+        var sanitizedBaseName = Path.GetFileName(baseName); // Prevents path traversal
         var invalidChars = Path.GetInvalidFileNameChars();
-        var sanitizedBaseName = string.Concat(baseName.Select(c => invalidChars.Contains(c) ? '_' : c));
+        sanitizedBaseName = string.Concat(sanitizedBaseName.Select(c => invalidChars.Contains(c) ? '_' : c));
 
         // Generate unique filename
         var fileName = $"{sanitizedBaseName}_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}.mlt";

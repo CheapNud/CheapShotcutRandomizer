@@ -246,11 +246,13 @@ public class ShotcutService(IXmlService xmlService)
         // Calculate total duration of playlist entries in seconds
         var totalDurationSeconds = playlist.Entry.Sum(e => e.Duration);
 
-        // Get frame rate from project profile
+        // Get frame rate from project profile with validation
         var frameRate = project.GetFrameRate();
+        if (frameRate <= 0)
+            frameRate = 30.0; // Fallback to standard frame rate
 
-        // Convert to frames
-        var totalFrames = (int)(totalDurationSeconds * frameRate);
+        // Convert to frames (ceiling to avoid cutting off final frame)
+        var totalFrames = (int)Math.Ceiling(totalDurationSeconds * frameRate);
 
         // Set the render range on the main tractor
         // in="0" starts from the beginning
