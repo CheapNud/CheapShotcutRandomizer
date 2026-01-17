@@ -563,7 +563,7 @@
     /// <summary>
     /// Save project to a generated file in the same directory as source (to preserve relative paths)
     /// </summary>
-    private async Task<string> SaveToTempFileAsync(Mlt project, string baseName)
+    private async Task<string> SaveToSourceDirectoryAsync(Mlt project, string baseName)
     {
         // Validate CurrentProjectPath is set
         if (string.IsNullOrWhiteSpace(ProjectState.CurrentProjectPath))
@@ -618,7 +618,7 @@
             var baseName = $"shuffled_{playlist.Name}".Replace(" ", "_");
 
             // Save to temp file
-            var tempPath = await SaveToTempFileAsync(projectCopy, baseName);
+            var tempPath = await SaveToSourceDirectoryAsync(projectCopy, baseName);
 
             // Debug: Verify file was created
             if (!File.Exists(tempPath))
@@ -683,7 +683,7 @@
 
             // Save to temp file
             var baseName = $"random_{newPlaylist.Name}".Replace(" ", "_");
-            var tempPath = await SaveToTempFileAsync(projectCopy, baseName);
+            var tempPath = await SaveToSourceDirectoryAsync(projectCopy, baseName);
 
             // Open render dialog with pre-populated source path
             // For generated random: hide track selection UI, pre-select only the generated track

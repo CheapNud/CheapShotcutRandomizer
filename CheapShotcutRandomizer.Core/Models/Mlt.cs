@@ -277,7 +277,9 @@ public class Tractor
     [XmlAttribute(AttributeName = "title")]
     public string? Title { get; set; }
 
-    // Prevent XmlSerializer from writing empty title attribute
+    // Prevent XmlSerializer from writing empty attributes
+    public bool ShouldSerializeIn() => !string.IsNullOrEmpty(In);
+    public bool ShouldSerializeOut() => !string.IsNullOrEmpty(Out);
     public bool ShouldSerializeTitle() => !string.IsNullOrEmpty(Title);
 }
 
