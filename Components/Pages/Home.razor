@@ -561,13 +561,13 @@
     }
 
     /// <summary>
-    /// Save project to a temporary file and return the path
+    /// Save project to a generated file in the same directory as source (to preserve relative paths)
     /// </summary>
     private async Task<string> SaveToTempFileAsync(Mlt project, string baseName)
     {
-        // Create temp directory for Shotcut Randomizer
-        var tempDir = Path.Combine(Path.GetTempPath(), "ShotcutRandomizer");
-        Directory.CreateDirectory(tempDir);
+        // IMPORTANT: Save in same directory as source project to preserve relative paths
+        // MLT files often reference media with relative paths - moving the MLT breaks these
+        var sourceDir = Path.GetDirectoryName(ProjectState.CurrentProjectPath) ?? Path.GetTempPath();
 
         // Sanitize baseName - remove invalid path characters
         var invalidChars = Path.GetInvalidFileNameChars();
@@ -575,10 +575,10 @@
 
         // Generate unique filename
         var fileName = $"{sanitizedBaseName}_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}.mlt";
-        var tempPath = Path.Combine(tempDir, fileName);
+        var outputPath = Path.Combine(sourceDir, fileName);
 
-        // Save project to temp file - SaveProjectAsync returns the actual saved path
-        var actualPath = await ShotcutSvc.SaveProjectAsync(project, tempPath);
+        // Save project - SaveProjectAsync returns the actual saved path
+        var actualPath = await ShotcutSvc.SaveProjectAsync(project, outputPath);
 
         return actualPath;
     }

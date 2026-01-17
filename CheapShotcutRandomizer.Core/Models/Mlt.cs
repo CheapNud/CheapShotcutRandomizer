@@ -142,7 +142,10 @@ public class Playlist
     public string Id { get; set; } = string.Empty;
 
     [XmlAttribute(AttributeName = "title")]
-    public string Title { get; set; } = string.Empty;
+    public string? Title { get; set; }
+
+    // Prevent XmlSerializer from writing empty title attribute
+    public bool ShouldSerializeTitle() => !string.IsNullOrEmpty(Title);
 
     /// <summary>
     /// Get ordered timeline items (Entry and Blank in sequential order)
@@ -228,11 +231,16 @@ public class Track
     [XmlAttribute(AttributeName = "producer")]
     public string Producer { get; set; } = string.Empty;
     [XmlAttribute(AttributeName = "in")]
-    public string In { get; set; } = string.Empty;
+    public string? In { get; set; }
     [XmlAttribute(AttributeName = "out")]
-    public string Out { get; set; } = string.Empty;
+    public string? Out { get; set; }
     [XmlAttribute(AttributeName = "hide")]
-    public string Hide { get; set; } = string.Empty;
+    public string? Hide { get; set; }
+
+    // Prevent XmlSerializer from writing empty attributes
+    public bool ShouldSerializeIn() => !string.IsNullOrEmpty(In);
+    public bool ShouldSerializeOut() => !string.IsNullOrEmpty(Out);
+    public bool ShouldSerializeHide() => !string.IsNullOrEmpty(Hide);
 }
 
 [XmlRoot(ElementName = "transition")]
@@ -243,7 +251,10 @@ public class Transition
     [XmlAttribute(AttributeName = "id")]
     public string Id { get; set; } = string.Empty;
     [XmlAttribute(AttributeName = "out")]
-    public string Out { get; set; } = string.Empty;
+    public string? Out { get; set; }
+
+    // Prevent XmlSerializer from writing empty out attribute
+    public bool ShouldSerializeOut() => !string.IsNullOrEmpty(Out);
 }
 
 [XmlRoot(ElementName = "tractor")]
@@ -264,7 +275,10 @@ public class Tractor
     [XmlElement(ElementName = "properties")]
     public Properties? Properties { get; set; }
     [XmlAttribute(AttributeName = "title")]
-    public string Title { get; set; } = string.Empty;
+    public string? Title { get; set; }
+
+    // Prevent XmlSerializer from writing empty title attribute
+    public bool ShouldSerializeTitle() => !string.IsNullOrEmpty(Title);
 }
 
 [XmlRoot(ElementName = "properties")]

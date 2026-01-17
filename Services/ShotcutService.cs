@@ -220,7 +220,43 @@ public class ShotcutService(IXmlService xmlService)
         var newTrackIndex = mainTractor.Track.Count; // Index where the new track will be added
         mainTractor.Track.Add(new Track { Producer = newPlaylist.Id });
 
+        // Set render range to match the generated playlist duration
+        SetRenderRangeToPlaylistDuration(project, newPlaylist);
+
         return (newPlaylist, newTrackIndex);
+    }
+
+    /// <summary>
+    /// Sets the main tractor's in/out points to match the duration of the specified playlist.
+    /// This limits the render output to only the playlist's content.
+    /// </summary>
+    public void SetRenderRangeToPlaylistDuration(Mlt project, Playlist playlist)
+    {
+        if (project == null)
+            throw new ArgumentNullException(nameof(project));
+        if (playlist == null)
+            throw new ArgumentNullException(nameof(playlist));
+
+        var mainTractor = project.Tractor?.FirstOrDefault(t =>
+            t.Property?.Any(p => p.Name == "shotcut") ?? false);
+
+        if (mainTractor == null)
+            return;
+
+        // Calculate total duration of playlist entries in seconds
+        var totalDurationSeconds = playlist.Entry.Sum(e => e.Duration);
+
+        // Get frame rate from project profile
+        var frameRate = project.GetFrameRate();
+
+        // Convert to frames
+        var totalFrames = (int)(totalDurationSeconds * frameRate);
+
+        // Set the render range on the main tractor
+        // in="0" starts from the beginning
+        // out is the total frames (exclusive, so total-1 would be last frame but MLT uses total)
+        mainTractor.In = "0";
+        mainTractor.Out = totalFrames.ToString();
     }
 
     /// <summary>

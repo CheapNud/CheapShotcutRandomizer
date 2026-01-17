@@ -28,12 +28,13 @@ public class DatabaseInitializationService : IHostedService
 
         if (databaseExists)
         {
-            // Verify schema is up to date by checking for new columns
+            // Verify schema is up to date by checking for columns that exist in RenderJob model
             try
             {
-                // Try to query with new columns - will fail if schema is old
+                // Try to query with current model columns - will fail if schema is outdated
+                // Note: AI upscaling columns were moved to CheapUpscaler project
                 await db.Database.ExecuteSqlRawAsync(
-                    "SELECT InPoint, OutPoint, SelectedVideoTracks, SelectedAudioTracks, FrameRate, IsTwoStageRender, IntermediatePath, OutputFileSizeBytes, IntermediateFileSizeBytes, CurrentStage, IsThreeStageRender, IntermediatePath2, IntermediateFileSizeBytes2, UseRifeInterpolation, UseRealCugan, RealCuganOptionsJson, UseRealEsrgan, RealEsrganOptionsJson, TargetUpscaleResolution, UseNonAiUpscaling, NonAiUpscalingAlgorithm, NonAiUpscalingScaleFactor FROM RenderJobs LIMIT 1",
+                    "SELECT InPoint, OutPoint, SelectedVideoTracks, SelectedAudioTracks, FrameRate, OutputFileSizeBytes FROM RenderJobs LIMIT 1",
                     cancellationToken);
 
                 Debug.WriteLine("Database schema is up to date");
