@@ -1,0 +1,85 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
+    <!-- Platform Support - Windows Only -->
+    <!-- Reasons: WMI (System.Management), TensorRT, SVP 4 Pro, NVENC -->
+    <RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>
+
+    <!-- Suppress CA1416: This is a Windows-only application by design -->
+    <!-- Dependencies: System.Management (WMI), TensorRT, SVP 4 Pro, WindowsIdentity -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+
+    <!-- Package Information -->
+    <AssemblyTitle>Cheap Shotcut Randomizer</AssemblyTitle>
+    <Product>Cheap Shotcut Randomizer</Product>
+    <Description>Desktop app for randomizing and generating optimized Shotcut video project playlists</Description>
+    <Company>Cheap Software Solutions</Company>
+    <Copyright>Copyright © Cheap Software Solutions</Copyright>
+    <Version>2.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- NuGet Package References -->
+    <PackageReference Include="CheapHelpers" Version="1.2.0" />
+    <PackageReference Include="CheapHelpers.Blazor" Version="1.2.0" />
+    <PackageReference Include="CheapHelpers.EF" Version="1.2.0" />
+    <PackageReference Include="CheapHelpers.Models" Version="1.2.0" />
+    <PackageReference Include="CheapHelpers.Services" Version="1.2.0" />
+    <PackageReference Include="SharpCompress" Version="0.44.0" />
+
+    <!-- CheapAvaloniaBlazor Package Reference -->
+    <PackageReference Include="CheapAvaloniaBlazor" Version="1.1.4" />
+
+    <!-- MudBlazor for UI components -->
+    <PackageReference Include="MudBlazor" Version="8.15.0" />
+
+    <!-- FFmpeg wrapper for video processing -->
+    <PackageReference Include="FFMpegCore" Version="5.4.0" />
+
+    <!-- Hardware detection (WMI) -->
+    <PackageReference Include="System.Management" Version="10.0.2" />
+
+    <!-- Entity Framework Core for render queue database -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+
+    <!-- Polly for retry logic -->
+    <PackageReference Include="Polly" Version="8.6.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Components\Shared\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="CheapShotcutRandomizer.Core\CheapShotcutRandomizer.Core.csproj" />
+    <PackageReference Include="CheapHelpers.MediaProcessing" Version="1.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Exclude test project files from main project compilation -->
+    <Compile Remove="CheapShotcutRandomizer.Tests/**" />
+    <Content Remove="CheapShotcutRandomizer.Tests/**" />
+    <EmbeddedResource Remove="CheapShotcutRandomizer.Tests/**" />
+    <None Remove="CheapShotcutRandomizer.Tests/**" />
+
+    <!-- Exclude Core project files from main project compilation -->
+    <Compile Remove="CheapShotcutRandomizer.Core/**" />
+    <Content Remove="CheapShotcutRandomizer.Core/**" />
+    <EmbeddedResource Remove="CheapShotcutRandomizer.Core/**" />
+    <None Remove="CheapShotcutRandomizer.Core/**" />
+  </ItemGroup>
+
+</Project>

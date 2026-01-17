@@ -1,0 +1,174 @@
+name: CI Build and Test
+
+on:
+  push:
+    branches: [ master, dev, 'f/**' ]
+  pull_request:
+    branches: [ master, dev ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  build-and-test:
+    name: Build and Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest]
+        configuration: [Debug, Release]
+      fail-fast: false
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        path: repo
+        fetch-depth: 0
+        submodules: recursive
+
+    - name: Checkout CheapHelpers dependency
+      uses: actions/checkout@v4
+      with:
+        repository: CheapNud/CheapHelpers
+        path: CheapHelpers
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-quality: 'preview'
+
+    - name: Display .NET info
+      run: dotnet --info
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('repo/**/*.csproj') }}
+        restore-paths: |
+          ~/.nuget/packages
+
+    - name: Restore dependencies
+      working-directory: repo
+      run: dotnet restore CheapShotcutRandomizer.sln
+
+    - name: Build solution
+      working-directory: repo
+      run: dotnet build CheapShotcutRandomizer.sln --configuration ${{ matrix.configuration }} --no-restore
+
+    - name: Run tests
+      working-directory: repo
+      run: dotnet test CheapShotcutRandomizer.Tests/CheapShotcutRandomizer.Tests.csproj --configuration ${{ matrix.configuration }} --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}-${{ matrix.configuration }}
+        path: 'repo/**/TestResults/**/*.trx'
+        retention-days: 30
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverage-${{ matrix.os }}-${{ matrix.configuration }}
+        path: 'repo/**/TestResults/**/coverage.cobertura.xml'
+        retention-days: 30
+
+    - name: Publish build artifacts (Release only)
+      if: matrix.configuration == 'Release'
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-${{ matrix.os }}-${{ matrix.configuration }}
+        path: |
+          repo/**/bin/Release/**
+          !repo/**/bin/Release/**/ref/**
+          !repo/**/bin/Release/**/*.pdb
+        retention-days: 7
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        path: repo
+        fetch-depth: 0
+
+    - name: Checkout CheapHelpers dependency
+      uses: actions/checkout@v4
+      with:
+        repository: CheapNud/CheapHelpers
+        path: CheapHelpers
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-quality: 'preview'
+
+    - name: Restore dependencies
+      working-directory: repo
+      run: dotnet restore CheapShotcutRandomizer.sln
+
+    - name: Check code formatting
+      working-directory: repo
+      run: dotnet format CheapShotcutRandomizer.sln --verify-no-changes --verbosity diagnostic
+      continue-on-error: true
+
+    - name: Run code analysis
+      working-directory: repo
+      run: dotnet build CheapShotcutRandomizer.sln --configuration Release /p:TreatWarningsAsErrors=false /p:WarningLevel=4
+
+  dependency-check:
+    name: Dependency Vulnerability Scan
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        path: repo
+
+    - name: Checkout CheapHelpers dependency
+      uses: actions/checkout@v4
+      with:
+        repository: CheapNud/CheapHelpers
+        path: CheapHelpers
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-quality: 'preview'
+
+    - name: Restore dependencies
+      working-directory: repo
+      run: dotnet restore CheapShotcutRandomizer.sln
+
+    - name: Check for vulnerable packages
+      working-directory: repo
+      run: dotnet list package --vulnerable --include-transitive
+      continue-on-error: true
+
+    - name: Check for deprecated packages
+      working-directory: repo
+      run: dotnet list package --deprecated
+      continue-on-error: true
+
+    - name: Check for outdated packages
+      working-directory: repo
+      run: dotnet list package --outdated
+      continue-on-error: true

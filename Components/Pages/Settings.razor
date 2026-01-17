@@ -1,0 +1,2299 @@
+@page "/settings"
+@using CheapShotcutRandomizer.Models
+@using CheapShotcutRandomizer.Services
+@using CheapAvaloniaBlazor.Services
+@using SharpCompress.Archives
+@using SharpCompress.Common
+@inject SettingsService SettingsService
+@inject SvpDetectionService SvpDetection
+@inject IDesktopInteropService DesktopInterop
+@inject ISnackbar Snackbar
+
+<PageTitle>Settings - Cheap Shotcut Randomizer</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Settings</MudText>
+
+@if (_settings == null)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    <MudText>Loading settings...</MudText>
+}
+else
+{
+    <!-- Centralized Dependency Manager -->
+    <MudPaper Class="pa-4 mb-6" Elevation="3">
+        <MudStack Spacing="3">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h5">
+                    <MudIcon Icon="@Icons.Material.Filled.Construction" Class="mr-2" />
+                    Dependency Manager
+                </MudText>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Primary"
+                              StartIcon="@Icons.Material.Filled.Download"
+                              OnClick="@InstallAllMissingDependencies"
+                              Disabled="@_isInstallingDependencies">
+                        @if (_isInstallingDependencies)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Installing...</span>
+                        }
+                        else
+                        {
+                            <span>Install All Missing</span>
+                        }
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                              Color="Color.Secondary"
+                              StartIcon="@Icons.Material.Filled.Refresh"
+                              OnClick="@RefreshAllDependencies">
+                        Refresh Status
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+
+            <MudDivider />
+
+            @if (_dependencyStatus == null)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else
+            {
+                <MudTable Items="@_dependencyStatus" Hover="true" Dense="true" Striped="true" Elevation="0" T="DependencyStatusItem">
+                    <HeaderContent>
+                        <MudTh>Category</MudTh>
+                        <MudTh>Dependency</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Version/Path</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Category">
+                            <MudChip T="string" Size="Size.Small" Color="@GetCategoryColor(context.Category)">
+                                @context.Category
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Dependency">
+                            <MudText Typo="Typo.body2">
+                                <strong>@context.Name</strong>
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @context.Description
+                            </MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Status">
+                            @{
+                                var isInstalling = _installingDependencies.Contains(context.Name);
+                            }
+                            @if (isInstalling)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" />
+                                    Installing
+                                </MudChip>
+                            }
+                            else if (context.IsInstalled)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">
+                                    Installed
+                                </MudChip>
+                            }
+                            else if (context.IsRequired)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Error">
+                                    Required
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Warning">
+                                    Optional
+                                </MudChip>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Version/Path">
+                            @if (context.CustomPathProperty != null)
+                            {
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                    <MudTextField @bind-Value="@context.CustomPathValue"
+                                                 Variant="Variant.Text"
+                                                 Margin="Margin.Dense"
+                                                 Placeholder="Auto-detect"
+                                                 Style="font-size: 0.75rem; max-width: 250px;" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.FolderOpen"
+                                                  Size="Size.Small"
+                                                  OnClick="@(() => BrowseForDependencyPath(context))"
+                                                  Color="Color.Primary" />
+                                </MudStack>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">
+                                    @(context.IsInstalled ? context.VersionOrPath : "-")
+                                </MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            @if (!context.IsInstalled && context.CanAutoInstall)
+                            {
+                                var isInstalling = _installingDependencies.Contains(context.Name);
+                                <MudButton Size="Size.Small"
+                                          Variant="Variant.Filled"
+                                          Color="Color.Primary"
+                                          StartIcon="@(isInstalling ? null : Icons.Material.Filled.Download)"
+                                          OnClick="@(() => InstallDependency(context))"
+                                          Disabled="@isInstalling">
+                                    @if (isInstalling)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                        <span>Installing...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Install</span>
+                                    }
+                                </MudButton>
+                            }
+                            else if (!context.IsInstalled && !string.IsNullOrEmpty(context.DownloadUrl))
+                            {
+                                <MudButton Size="Size.Small"
+                                          Variant="Variant.Text"
+                                          Color="Color.Info"
+                                          StartIcon="@Icons.Material.Filled.OpenInNew"
+                                          Href="@context.DownloadUrl"
+                                          Target="_blank">
+                                    Download
+                                </MudButton>
+                            }
+                            else if (context.IsInstalled)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle"
+                                        Color="Color.Success"
+                                        Size="Size.Small" />
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+
+                @* Summary Stats *@
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <MudText Typo="Typo.body2">
+                        <strong>Status:</strong>
+                        @_dependencyStatus.Count(d => d.IsInstalled) / @_dependencyStatus.Count installed
+                        (@_dependencyStatus.Count(d => !d.IsInstalled && d.IsRequired) required missing,
+                        @_dependencyStatus.Count(d => !d.IsInstalled && !d.IsRequired) optional available)
+                    </MudText>
+                </MudAlert>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <MudGrid>
+        <!-- Logging Settings -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.Description" Class="mr-2" />
+                    Logging
+                </MudText>
+                <MudSwitch @bind-Value="_settings.VerboseLogging"
+                          Label="Enable Verbose Logging"
+                          Color="Color.Primary"
+                          ThumbIcon="@(_settings.VerboseLogging ? Icons.Material.Filled.Check : null)" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                    When enabled, detailed Debug.WriteLine statements will be written for troubleshooting
+                </MudText>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Application Behavior -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-2" />
+                    Application Behavior
+                </MudText>
+                <MudNumericField @bind-Value="_settings.MaxConcurrentRenders"
+                                Label="Max Concurrent Renders"
+                                Variant="Variant.Outlined"
+                                Min="1"
+                                Max="8"
+                                Class="mb-3" />
+                <MudSwitch @bind-Value="_settings.AutoStartQueue"
+                          Label="Auto-start Render Queue"
+                          Color="Color.Primary"
+                          Class="mb-2" />
+                <MudSwitch @bind-Value="_settings.ShowNotificationsOnComplete"
+                          Label="Show Notifications on Completion"
+                          Color="Color.Primary" />
+            </MudPaper>
+        </MudItem>
+
+        <!-- SVP Detection -->
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Class="mr-2" />
+                    SmoothVideo Project (SVP) Integration
+                </MudText>
+
+                @if (_svpInstallation != null)
+                {
+                    <MudAlert Severity="@(_svpInstallation.IsInstalled ? Severity.Success : Severity.Warning)"
+                             Dense="true"
+                             Class="mb-3">
+                        @if (_svpInstallation.IsInstalled)
+                        {
+                            <MudText>SVP 4 Pro detected: @_svpInstallation.Version</MudText>
+                            <MudText Typo="Typo.caption">FFmpeg: @_svpInstallation.FFmpegVersion | Python: @_svpInstallation.PythonVersion</MudText>
+                        }
+                        else
+                        {
+                            <MudText>SVP 4 Pro not detected - will use Shotcut encoders as fallback</MudText>
+                        }
+                    </MudAlert>
+
+                    @if (_svpInstallation.IsInstalled)
+                    {
+                        <MudSwitch @bind-Value="_settings.UseSvpEncoders"
+                                  Label="Use SVP encoders (recommended)"
+                                  Color="Color.Primary"
+                                  ThumbIcon="@(_settings.UseSvpEncoders ? Icons.Material.Filled.Check : null)"
+                                  Class="mb-3" />
+
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                            SVP includes high-quality FFmpeg builds with better NVENC support. Recommended for best performance.
+                        </MudText>
+
+                        <MudExpansionPanels>
+                            <MudExpansionPanel Text="SVP Installation Details">
+                                <MudGrid>
+                                    <MudItem xs="12" md="6">
+                                        <MudTextField Value="@_svpInstallation.InstallPath"
+                                                     Label="Installation Path"
+                                                     Variant="Variant.Outlined"
+                                                     ReadOnly="true" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="6">
+                                        <MudTextField Value="@_svpInstallation.FFmpegPath"
+                                                     Label="FFmpeg Path"
+                                                     Variant="Variant.Outlined"
+                                                     ReadOnly="true" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="6">
+                                        <MudTextField Value="@_svpInstallation.PythonPath"
+                                                     Label="Python Path"
+                                                     Variant="Variant.Outlined"
+                                                     ReadOnly="true" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="6">
+                                        <MudChip T="string"
+                                                Color="@(_svpInstallation.FFmpegHasNvenc ? Color.Success : Color.Warning)"
+                                                Size="Size.Small">
+                                            NVENC Support: @(_svpInstallation.FFmpegHasNvenc ? "Available" : "Not Available")
+                                        </MudChip>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    }
+                }
+                else
+                {
+                    <MudProgressCircular Color="Color.Primary" Size="Size.Small" Indeterminate="true" />
+                    <MudText Typo="Typo.caption">Detecting SVP installation...</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+
+        <!-- Render Default Settings -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.VideoSettings" Class="mr-2" />
+                    Default Render Settings
+                </MudText>
+                <MudSelect @bind-Value="_settings.DefaultQuality"
+                          Label="Quality"
+                          Variant="Variant.Outlined"
+                          Class="mb-3">
+                    <MudSelectItem Value="@("Low")">Low</MudSelectItem>
+                    <MudSelectItem Value="@("Medium")">Medium</MudSelectItem>
+                    <MudSelectItem Value="@("High")">High</MudSelectItem>
+                    <MudSelectItem Value="@("Ultra")">Ultra</MudSelectItem>
+                </MudSelect>
+                <MudSelect @bind-Value="_settings.DefaultCodec"
+                          Label="Codec"
+                          Variant="Variant.Outlined"
+                          Class="mb-3">
+                    <MudSelectItem Value="@("libx264")">H.264 (libx264)</MudSelectItem>
+                    <MudSelectItem Value="@("libx265")">H.265 (libx265)</MudSelectItem>
+                    <MudSelectItem Value="@("h264_nvenc")">H.264 NVENC (NVIDIA)</MudSelectItem>
+                    <MudSelectItem Value="@("hevc_nvenc")">H.265 NVENC (NVIDIA)</MudSelectItem>
+                    <MudSelectItem Value="@("h264_qsv")">H.264 QuickSync (Intel)</MudSelectItem>
+                    <MudSelectItem Value="@("hevc_qsv")">H.265 QuickSync (Intel)</MudSelectItem>
+                </MudSelect>
+                <MudNumericField @bind-Value="_settings.DefaultCrf"
+                                Label="CRF (Constant Rate Factor)"
+                                Variant="Variant.Outlined"
+                                Min="0"
+                                Max="51"
+                                Class="mb-3"
+                                HelperText="Lower = better quality, larger file (18-28 recommended)" />
+                <MudSelect @bind-Value="_settings.DefaultPreset"
+                          Label="Encoding Preset"
+                          Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("ultrafast")">Ultrafast</MudSelectItem>
+                    <MudSelectItem Value="@("superfast")">Superfast</MudSelectItem>
+                    <MudSelectItem Value="@("veryfast")">Very Fast</MudSelectItem>
+                    <MudSelectItem Value="@("faster")">Faster</MudSelectItem>
+                    <MudSelectItem Value="@("fast")">Fast</MudSelectItem>
+                    <MudSelectItem Value="@("medium")">Medium</MudSelectItem>
+                    <MudSelectItem Value="@("slow")">Slow</MudSelectItem>
+                    <MudSelectItem Value="@("slower")">Slower</MudSelectItem>
+                    <MudSelectItem Value="@("veryslow")">Very Slow</MudSelectItem>
+                </MudSelect>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Note: AI features (RIFE, Real-ESRGAN, Real-CUGAN) have been moved to CheapUpscaler -->
+
+        <!-- Action Buttons -->
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" Spacing="3">
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Primary"
+                              StartIcon="@Icons.Material.Filled.Save"
+                              OnClick="SaveSettingsAsync">
+                        Save Settings
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                              Color="Color.Secondary"
+                              StartIcon="@Icons.Material.Filled.Refresh"
+                              OnClick="ReloadSettingsAsync">
+                        Reload
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                              Color="Color.Warning"
+                              StartIcon="@Icons.Material.Filled.RestartAlt"
+                              OnClick="ResetToDefaultsAsync">
+                        Reset to Defaults
+                    </MudButton>
+                    <MudSpacer />
+                    <MudButton Variant="Variant.Text"
+                              Color="Color.Info"
+                              StartIcon="@Icons.Material.Filled.FolderOpen"
+                              OnClick="OpenSettingsFolder">
+                        Open Settings Folder
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@inject HardwareDetectionService HardwareDetection
+@inject ExecutableDetectionService ExecutableDetection
+
+@code {
+    private AppSettings? _settings;
+    private SvpInstallation? _svpInstallation;
+    private HardwareCapabilities? _hardwareCapabilities;
+    private bool _vsRealEsrganInstalled = false;
+    private bool _pytorchCudaInstalled = false;
+    private string _pytorchDiagnostics = "";
+    private bool _vsMLRTInstalled = false;
+    private bool _isInstallingDependencies = false;
+    private List<DependencyStatusItem>? _dependencyStatus = null;
+    private HashSet<string> _installingDependencies = new();
+
+    private enum FileType
+    {
+        FFmpeg,
+        FFprobe,
+        Melt,
+        Rife
+    }
+
+    private class DependencyInfo
+    {
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public bool IsInstalled { get; set; }
+        public string StatusText => IsInstalled ? "Installed" : "Missing";
+        public Color StatusColor => IsInstalled ? Color.Success : Color.Warning;
+        public string StatusIcon => IsInstalled ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Warning;
+        public Func<Task> InstallAction { get; set; } = () => Task.CompletedTask;
+    }
+
+    private class DependencyStatusItem
+    {
+        public string Category { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public bool IsInstalled { get; set; }
+        public bool IsRequired { get; set; }
+        public bool CanAutoInstall { get; set; }
+        public string? VersionOrPath { get; set; }
+        public string? DownloadUrl { get; set; }
+        public Func<Task>? InstallAction { get; set; }
+
+        // For custom path support
+        public string? CustomPathProperty { get; set; } // Property name in settings (e.g., "FFmpegPath")
+        public string? CustomPathValue { get; set; } // Current path value
+        public FileType? BrowseFileType { get; set; } // File type for browse dialog
+    }
+
+    private List<DependencyInfo> GetDependencyStatus()
+    {
+        return new List<DependencyInfo>
+        {
+            new DependencyInfo
+            {
+                Name = "PyTorch with CUDA",
+                Description = "Deep learning framework with GPU acceleration",
+                IsInstalled = _pytorchCudaInstalled,
+                InstallAction = InstallPyTorchCuda
+            },
+            new DependencyInfo
+            {
+                Name = "vsrealesrgan",
+                Description = "VapourSynth Real-ESRGAN plugin for AI upscaling",
+                IsInstalled = _vsRealEsrganInstalled,
+                InstallAction = InstallVsRealEsrgan
+            }
+        };
+    }
+
+    private Color GetCategoryColor(string category)
+    {
+        return category switch
+        {
+            "Core" => Color.Primary,
+            "AI Tools" => Color.Tertiary,
+            "Optional" => Color.Secondary,
+            _ => Color.Default
+        };
+    }
+
+    private async Task PopulateDependencyStatus()
+    {
+        if (_settings == null) return;
+
+        var dependencies = new List<DependencyStatusItem>();
+
+        // Core Dependencies (Required)
+        var ffmpegPath = ExecutableDetection.DetectFFmpeg(_settings.UseSvpEncoders, _settings.FFmpegPath);
+        dependencies.Add(new DependencyStatusItem
+        {
+            Category = "Core",
+            Name = "FFmpeg",
+            Description = "Video encoding/decoding tool",
+            IsInstalled = ffmpegPath != null,
+            IsRequired = true,
+            CanAutoInstall = false,
+            VersionOrPath = ffmpegPath,
+            DownloadUrl = "https://ffmpeg.org/download.html",
+            CustomPathProperty = "FFmpegPath",
+            CustomPathValue = _settings.FFmpegPath,
+            BrowseFileType = FileType.FFmpeg
+        });
+
+        var ffprobePath = ExecutableDetection.DetectFFprobe(_settings.UseSvpEncoders, _settings.FFprobePath);
+        dependencies.Add(new DependencyStatusItem
+        {
+            Category = "Core",
+            Name = "FFprobe",
+            Description = "Video analysis tool (required for RIFE validation)",
+            IsInstalled = ffprobePath != null,
+            IsRequired = true,
+            CanAutoInstall = false,
+            VersionOrPath = ffprobePath,
+            DownloadUrl = "https://ffmpeg.org/download.html",
+            CustomPathProperty = "FFprobePath",
+            CustomPathValue = _settings.FFprobePath,
+            BrowseFileType = FileType.FFprobe
+        });
+
+        var meltPath = ExecutableDetection.DetectMelt(_settings.MeltPath);
+        dependencies.Add(new DependencyStatusItem
+        {
+            Category = "Core",
+            Name = "Melt (Shotcut/MLT)",
+            Description = "Shotcut video project renderer",
+            IsInstalled = meltPath != null,
+            IsRequired = true,
+            CanAutoInstall = false,
+            VersionOrPath = meltPath,
+            DownloadUrl = "https://shotcut.org/download/",
+            CustomPathProperty = "MeltPath",
+            CustomPathValue = _settings.MeltPath,
+            BrowseFileType = FileType.Melt
+        });
+
+        // Python (Required for AI features)
+        var pythonInstalled = await DetectPython();
+        // Note: Python, VapourSynth, and AI Tools (PyTorch, vsrealesrgan, vs-mlrt, RIFE) have been moved to CheapUpscaler
+
+        _dependencyStatus = dependencies;
+        StateHasChanged();
+    }
+
+    private async Task<bool> DetectPython()
+    {
+        try
+        {
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = "--version",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            await process.WaitForExitAsync();
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task<bool> DetectVapourSynth()
+    {
+        try
+        {
+            // Check if vspipe is in PATH
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "vspipe",
+                    Arguments = "--version",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            await process.WaitForExitAsync();
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task RefreshAllDependencies()
+    {
+        await DetectVsRealEsrgan();
+        await DetectPyTorchCuda();
+        await DetectVsMLRT();
+        await PopulateDependencyStatus();
+        Snackbar.Add("Dependency status refreshed", Severity.Info);
+    }
+
+    private async Task InstallDependency(DependencyStatusItem dependency)
+    {
+        if (dependency.InstallAction == null || _installingDependencies.Contains(dependency.Name))
+            return;
+
+        _installingDependencies.Add(dependency.Name);
+        StateHasChanged();
+
+        try
+        {
+            System.Diagnostics.Debug.WriteLine($"[Dependency Manager] Starting installation of {dependency.Name}...");
+            await dependency.InstallAction();
+            System.Diagnostics.Debug.WriteLine($"[Dependency Manager] Installation of {dependency.Name} completed");
+            await Task.Delay(500); // Brief delay to ensure UI updates
+            await RefreshAllDependencies();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Dependency Manager] Error installing {dependency.Name}: {ex}");
+            Snackbar.Add($"Error installing {dependency.Name}: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _installingDependencies.Remove(dependency.Name);
+            StateHasChanged();
+        }
+    }
+
+    private async Task InstallAllMissingDependencies()
+    {
+        _isInstallingDependencies = true;
+        StateHasChanged();
+
+        try
+        {
+            if (_dependencyStatus == null)
+            {
+                await PopulateDependencyStatus();
+            }
+
+            var missingAutoInstallable = _dependencyStatus?
+                .Where(d => !d.IsInstalled && d.CanAutoInstall && d.InstallAction != null)
+                .ToList();
+
+            if (missingAutoInstallable == null || missingAutoInstallable.Count == 0)
+            {
+                Snackbar.Add("No missing auto-installable dependencies found", Severity.Info);
+                return;
+            }
+
+            Snackbar.Add($"Installing {missingAutoInstallable.Count} dependencies...", Severity.Info);
+
+            // Install PyTorch first (vsrealesrgan depends on it)
+            var pytorchDep = missingAutoInstallable.FirstOrDefault(d => d.Name.Contains("PyTorch"));
+            if (pytorchDep != null)
+            {
+                await InstallDependency(pytorchDep);
+            }
+
+            // Then install vsrealesrgan
+            var esrganDep = missingAutoInstallable.FirstOrDefault(d => d.Name.Contains("vsrealesrgan"));
+            if (esrganDep != null)
+            {
+                await InstallDependency(esrganDep);
+            }
+
+            // Then install vs-mlrt
+            var mlrtDep = missingAutoInstallable.FirstOrDefault(d => d.Name.Contains("vs-mlrt"));
+            if (mlrtDep != null)
+            {
+                await InstallDependency(mlrtDep);
+            }
+
+            Snackbar.Add("All auto-installable dependencies processed!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error installing dependencies: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isInstallingDependencies = false;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSettingsAsync();
+        DetectSvpInstallation();
+        await DetectHardwareAsync();
+        await DetectVsRealEsrgan();
+        await DetectPyTorchCuda();
+        await DetectVsMLRT();
+        await PopulateDependencyStatus();
+    }
+
+    private async Task DetectHardwareAsync()
+    {
+        try
+        {
+            _hardwareCapabilities = await HardwareDetection.DetectHardwareAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error detecting hardware: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private void DetectSvpInstallation()
+    {
+        try
+        {
+            _svpInstallation = SvpDetection.DetectSvpInstallation();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error detecting SVP: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private async Task DetectVsRealEsrgan()
+    {
+        try
+        {
+            // Check if Python can import vsrealesrgan
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = "-c \"import vsrealesrgan; print('OK')\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            _vsRealEsrganInstalled = process.ExitCode == 0 && output.Contains("OK");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error detecting vsrealesrgan: {ex.Message}");
+            _vsRealEsrganInstalled = false;
+        }
+    }
+
+    private async Task InstallVsRealEsrgan()
+    {
+        try
+        {
+            Snackbar.Add("Installing vsrealesrgan via pip... This may take a minute.", Severity.Info);
+
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "pip",
+                    Arguments = "install vsrealesrgan",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode == 0)
+            {
+                Snackbar.Add("vsrealesrgan installed successfully!", Severity.Success);
+                await DetectVsRealEsrgan(); // Refresh detection
+            }
+            else
+            {
+                var error = await process.StandardError.ReadToEndAsync();
+                Snackbar.Add($"Installation failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error installing vsrealesrgan: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DetectPyTorchCuda()
+    {
+        try
+        {
+            // Check if Python can import torch and CUDA is available
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = "-c \"import torch; print('OK' if torch.cuda.is_available() else 'NO_CUDA')\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            _pytorchCudaInstalled = process.ExitCode == 0 && output.Contains("OK");
+
+            // Also capture diagnostics
+            if (!_pytorchCudaInstalled && process.ExitCode == 0)
+            {
+                _pytorchDiagnostics = output.Trim();
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error detecting PyTorch CUDA: {ex.Message}");
+            _pytorchCudaInstalled = false;
+            _pytorchDiagnostics = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task RunPyTorchDiagnostics()
+    {
+        try
+        {
+            Snackbar.Add("Running PyTorch diagnostics...", Severity.Info);
+
+            // Run comprehensive diagnostic
+            var diagnosticScript = @"
+import sys
+try:
+    import torch
+    print(f'PyTorch version: {torch.__version__}')
+    print(f'CUDA available: {torch.cuda.is_available()}')
+    if torch.cuda.is_available():
+        print(f'CUDA version (torch): {torch.version.cuda}')
+        print(f'GPU count: {torch.cuda.device_count()}')
+        print(f'Current GPU: {torch.cuda.current_device()}')
+        print(f'GPU name: {torch.cuda.get_device_name(0)}')
+    else:
+        print('CUDA not available - possible reasons:')
+        print('1. PyTorch installed without CUDA support')
+        print('2. NVIDIA drivers not installed/outdated')
+        print('3. CUDA runtime libraries missing')
+except ImportError as e:
+    print(f'ERROR: Cannot import torch: {e}')
+except Exception as e:
+    print(f'ERROR: {e}')
+";
+
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = $"-c \"{diagnosticScript.Replace("\"", "\\\"")}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            var errorOutput = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            _pytorchDiagnostics = output + (string.IsNullOrEmpty(errorOutput) ? "" : $"\nErrors:\n{errorOutput}");
+
+            System.Diagnostics.Debug.WriteLine($"PyTorch Diagnostics:\n{_pytorchDiagnostics}");
+
+            Snackbar.Add("Diagnostics complete - check output below", Severity.Info);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            _pytorchDiagnostics = $"Diagnostic error: {ex.Message}";
+            Snackbar.Add($"Diagnostic failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task<string> DetectCudaVersionAsync()
+    {
+        try
+        {
+            // Try to detect CUDA version via nvidia-smi
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "nvidia-smi",
+                    Arguments = "--query-gpu=driver_version --format=csv,noheader",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            {
+                // Parse CUDA version from driver version
+                // NVIDIA driver versions map to CUDA versions
+                var driverVersion = output.Trim();
+                System.Diagnostics.Debug.WriteLine($"NVIDIA driver version: {driverVersion}");
+
+                // Try to get CUDA runtime version
+                var cudaProcess = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "nvcc",
+                        Arguments = "--version",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+
+                cudaProcess.Start();
+                var cudaOutput = await cudaProcess.StandardOutput.ReadToEndAsync();
+                await cudaProcess.WaitForExitAsync();
+
+                if (cudaProcess.ExitCode == 0 && cudaOutput.Contains("release"))
+                {
+                    // Parse CUDA version from nvcc output (e.g., "release 12.6")
+                    if (cudaOutput.Contains("release 13."))
+                        return "cu130";
+                    else if (cudaOutput.Contains("release 12.8"))
+                        return "cu128";
+                    else if (cudaOutput.Contains("release 12.6") || cudaOutput.Contains("release 12."))
+                        return "cu126";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error detecting CUDA version: {ex.Message}");
+        }
+
+        // Default to CUDA 12.6 (widely compatible)
+        return "cu126";
+    }
+
+    private async Task InstallPyTorchCuda()
+    {
+        try
+        {
+            // Step 1: Uninstall existing PyTorch (especially CPU version)
+            Snackbar.Add("Uninstalling existing PyTorch (if any)...", Severity.Info);
+
+            var uninstallProcess = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "pip3",
+                    Arguments = "uninstall torch torchvision torchaudio -y",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            uninstallProcess.Start();
+            await uninstallProcess.WaitForExitAsync();
+
+            System.Diagnostics.Debug.WriteLine($"[pip uninstall] Exit code: {uninstallProcess.ExitCode}");
+
+            // Step 2: Detect CUDA version
+            Snackbar.Add("Detecting CUDA version...", Severity.Info);
+
+            var cudaVersion = await DetectCudaVersionAsync();
+            var cudaDisplayVersion = cudaVersion switch
+            {
+                "cu130" => "CUDA 13.0",
+                "cu128" => "CUDA 12.8",
+                "cu126" => "CUDA 12.6",
+                _ => "CUDA 12.6 (default)"
+            };
+
+            // Step 3: Install CUDA version with explicit index URL
+            Snackbar.Add($"Installing PyTorch with {cudaDisplayVersion}... This may take several minutes (large download ~2GB).", Severity.Info, config =>
+            {
+                config.VisibleStateDuration = 10000;
+            });
+
+            var indexUrl = $"https://download.pytorch.org/whl/{cudaVersion}";
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "pip3",
+                    Arguments = $"install torch torchvision --index-url {indexUrl} --force-reinstall --no-cache-dir",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+
+            // Read output in real-time for better UX
+            var outputTask = Task.Run(async () =>
+            {
+                while (!process.StandardOutput.EndOfStream)
+                {
+                    var line = await process.StandardOutput.ReadLineAsync();
+                    if (!string.IsNullOrEmpty(line))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[pip install] {line}");
+                    }
+                }
+            });
+
+            await process.WaitForExitAsync();
+            await outputTask;
+
+            if (process.ExitCode == 0)
+            {
+                Snackbar.Add($"Installation complete - verifying CUDA support...", Severity.Info);
+
+                // Step 4: Verify installation has CUDA support
+                await Task.Delay(1000); // Give Python time to reload modules
+                await RunPyTorchDiagnostics();
+                await DetectPyTorchCuda();
+
+                if (_pytorchCudaInstalled)
+                {
+                    Snackbar.Add($"Success! PyTorch with {cudaDisplayVersion} is working!", Severity.Success, config =>
+                    {
+                        config.VisibleStateDuration = 5000;
+                    });
+                }
+                else
+                {
+                    Snackbar.Add("Warning: PyTorch installed but CUDA is still not available. Check diagnostics below.", Severity.Warning, config =>
+                    {
+                        config.VisibleStateDuration = 8000;
+                    });
+                }
+            }
+            else
+            {
+                var error = await process.StandardError.ReadToEndAsync();
+                System.Diagnostics.Debug.WriteLine($"PyTorch installation failed: {error}");
+                Snackbar.Add($"Installation failed. Check Debug output for details.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error installing PyTorch: {ex.Message}", Severity.Error);
+            System.Diagnostics.Debug.WriteLine($"PyTorch installation exception: {ex}");
+        }
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        try
+        {
+            _settings = await SettingsService.LoadSettingsAsync();
+            LogVerbose("Settings loaded in UI");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading settings: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        if (_settings == null) return;
+
+        try
+        {
+            await SettingsService.SaveSettingsAsync(_settings);
+
+            // Refresh debug logger to pick up new VerboseLogging setting
+            CheapShotcutRandomizer.Services.Utilities.DebugLogger.RefreshSettings();
+
+            Snackbar.Add("Settings saved successfully", Severity.Success);
+            LogVerbose("Settings saved from UI");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving settings: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ReloadSettingsAsync()
+    {
+        await LoadSettingsAsync();
+        Snackbar.Add("Settings reloaded from file", Severity.Info);
+    }
+
+    private async Task ResetToDefaultsAsync()
+    {
+        try
+        {
+            await SettingsService.ResetToDefaultsAsync();
+            await LoadSettingsAsync();
+            Snackbar.Add("Settings reset to defaults", Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error resetting settings: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void OpenSettingsFolder()
+    {
+        try
+        {
+            var folderPath = Path.GetDirectoryName(SettingsService.GetSettingsFilePath());
+            if (folderPath != null)
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folderPath,
+                    UseShellExecute = true
+                });
+                LogVerbose($"Opened settings folder: {folderPath}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error opening folder: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task BrowseForFile(FileType fileType)
+    {
+        // File selection for executables
+        var (title, filters, settingProperty) = fileType switch
+        {
+            FileType.FFmpeg => (
+                "Select FFmpeg Executable",
+                new List<CheapAvaloniaBlazor.Models.FileFilter>
+                {
+                    new() { Name = "FFmpeg Executable", Extensions = new[] { "*.exe" } },
+                    new() { Name = "All Files", Extensions = new[] { "*.*" } }
+                },
+                (Func<string, Task>)(path => { _settings!.FFmpegPath = path; return Task.CompletedTask; })
+            ),
+            FileType.FFprobe => (
+                "Select FFprobe Executable",
+                new List<CheapAvaloniaBlazor.Models.FileFilter>
+                {
+                    new() { Name = "FFprobe Executable", Extensions = new[] { "*.exe" } },
+                    new() { Name = "All Files", Extensions = new[] { "*.*" } }
+                },
+                (Func<string, Task>)(path => { _settings!.FFprobePath = path; return Task.CompletedTask; })
+            ),
+            FileType.Melt => (
+                "Select Melt Executable",
+                new List<CheapAvaloniaBlazor.Models.FileFilter>
+                {
+                    new() { Name = "Melt Executable", Extensions = new[] { "*.exe" } },
+                    new() { Name = "All Files", Extensions = new[] { "*.*" } }
+                },
+                (Func<string, Task>)(path => { _settings!.MeltPath = path; return Task.CompletedTask; })
+            ),
+            _ => throw new ArgumentException($"Unknown file type: {fileType}")
+        };
+
+        var options = new CheapAvaloniaBlazor.Models.FileDialogOptions
+        {
+            Title = title,
+            Filters = filters
+        };
+
+        try
+        {
+            var selectedFile = await DesktopInterop.OpenFileDialogAsync(options);
+
+            if (!string.IsNullOrEmpty(selectedFile))
+            {
+                await settingProperty(selectedFile);
+                Snackbar.Add($"Path updated to: {Path.GetFileName(selectedFile)}", Severity.Success);
+                LogVerbose($"Selected {fileType}: {selectedFile}");
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error selecting file: {ex.Message}", Severity.Error);
+            LogVerbose($"Error in BrowseForFile: {ex}");
+        }
+    }
+
+    private void LogVerbose(string message)
+    {
+        if (_settings?.VerboseLogging == true)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Settings Page] {message}");
+        }
+    }
+
+    private async Task BrowseForDependencyPath(DependencyStatusItem dependency)
+    {
+        if (dependency.BrowseFileType == null || _settings == null)
+            return;
+
+        await BrowseForFile(dependency.BrowseFileType.Value);
+
+        // After browsing, update the dependency's custom path value and refresh
+        dependency.CustomPathValue = dependency.CustomPathProperty switch
+        {
+            "FFmpegPath" => _settings.FFmpegPath,
+            "FFprobePath" => _settings.FFprobePath,
+            "MeltPath" => _settings.MeltPath,
+            _ => dependency.CustomPathValue
+        };
+
+        await PopulateDependencyStatus();
+    }
+
+    private string? FindWinRarExecutable()
+    {
+        // Check common WinRAR installation paths
+        var commonPaths = new[]
+        {
+            @"C:\Program Files\WinRAR\WinRAR.exe",
+            @"C:\Program Files (x86)\WinRAR\WinRAR.exe",
+            System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WinRAR", "WinRAR.exe"),
+            System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "WinRAR", "WinRAR.exe")
+        };
+
+        foreach (var path in commonPaths)
+        {
+            if (System.IO.File.Exists(path))
+            {
+                return path;
+            }
+        }
+
+        // Check if WinRAR.exe is in PATH
+        try
+        {
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "where",
+                    Arguments = "WinRAR.exe",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            var output = process.StandardOutput.ReadToEnd().Trim();
+            process.WaitForExit();
+
+            if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            {
+                var firstPath = output.Split('\n')[0].Trim();
+                if (System.IO.File.Exists(firstPath))
+                {
+                    return firstPath;
+                }
+            }
+        }
+        catch
+        {
+            // where command failed, WinRAR.exe not in PATH
+        }
+
+        return null;
+    }
+
+    private string? Find7ZipExecutable()
+    {
+        // Check common 7-Zip installation paths
+        var commonPaths = new[]
+        {
+            @"C:\Program Files\7-Zip\7z.exe",
+            @"C:\Program Files (x86)\7-Zip\7z.exe",
+            System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "7-Zip", "7z.exe"),
+            System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "7-Zip", "7z.exe")
+        };
+
+        foreach (var path in commonPaths)
+        {
+            if (System.IO.File.Exists(path))
+            {
+                return path;
+            }
+        }
+
+        // Check if 7z.exe is in PATH
+        try
+        {
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "where",
+                    Arguments = "7z.exe",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            var output = process.StandardOutput.ReadToEnd().Trim();
+            process.WaitForExit();
+
+            if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            {
+                var firstPath = output.Split('\n')[0].Trim();
+                if (System.IO.File.Exists(firstPath))
+                {
+                    return firstPath;
+                }
+            }
+        }
+        catch
+        {
+            // where command failed, 7z.exe not in PATH
+        }
+
+        return null;
+    }
+
+    private async Task DetectVsMLRT()
+    {
+        try
+        {
+            // Check if vsmlrt.py script exists in VapourSynth scripts folder
+            // VapourSynth uses its own Python environment, so we check file existence
+            var vapourSynthScriptsDir = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                @"VapourSynth\scripts");
+
+            var vsmlrtScript = System.IO.Path.Combine(vapourSynthScriptsDir, "vsmlrt.py");
+            bool scriptExists = System.IO.File.Exists(vsmlrtScript);
+
+            if (scriptExists)
+            {
+                System.Diagnostics.Debug.WriteLine($"✅ vsmlrt.py found in VapourSynth scripts: {vsmlrtScript}");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"❌ vsmlrt.py not found in VapourSynth scripts: {vsmlrtScript}");
+            }
+
+            // Check if DLLs exist
+            var userPluginsDir = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                @"VapourSynth\plugins64");
+
+            var vstrtDll = System.IO.Path.Combine(userPluginsDir, "vstrt.dll");
+            var dllsExist = System.IO.File.Exists(vstrtDll);
+
+            _vsMLRTInstalled = scriptExists && dllsExist;
+
+            System.Diagnostics.Debug.WriteLine($"vs-mlrt detection: script={scriptExists}, dlls={dllsExist}, installed={_vsMLRTInstalled}");
+
+            StateHasChanged();
+            await Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error detecting vs-mlrt: {ex.Message}");
+            _vsMLRTInstalled = false;
+        }
+    }
+
+    private async Task InstallVsMLRT()
+    {
+        try
+        {
+            Snackbar.Add("Installing vs-mlrt and dependencies... This may take a minute.", Severity.Info);
+
+            // Try to find vsrepo.py in VapourSynth installation
+            var vsrepoPaths = new[]
+            {
+                @"C:\Program Files\VapourSynth\vsrepo\vsrepo.py",
+                @"C:\Program Files\VapourSynth\core\vsrepo.py",
+                @"C:\Program Files (x86)\VapourSynth\vsrepo\vsrepo.py",
+                @"C:\Program Files (x86)\VapourSynth\core\vsrepo.py"
+            };
+
+            string? vsrepoPath = null;
+            foreach (var path in vsrepoPaths)
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    vsrepoPath = path;
+                    break;
+                }
+            }
+
+            if (vsrepoPath == null)
+            {
+                Snackbar.Add("Could not find vsrepo. Please install VapourSynth first.", Severity.Error);
+                return;
+            }
+
+            // Install BestSource (VapourSynth source plugin) first
+            bool sourcePluginSuccess = true;
+            try
+            {
+                Snackbar.Add("Installing BestSource (video source plugin)...", Severity.Info);
+
+                var sourceProcess = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "python",
+                        Arguments = $"\"{vsrepoPath}\" install bestsource",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+
+                sourceProcess.Start();
+                var sourceOutput = await sourceProcess.StandardOutput.ReadToEndAsync();
+                var sourceError = await sourceProcess.StandardError.ReadToEndAsync();
+                await sourceProcess.WaitForExitAsync();
+
+                System.Diagnostics.Debug.WriteLine($"vsrepo bestsource output: {sourceOutput}");
+                System.Diagnostics.Debug.WriteLine($"vsrepo bestsource error: {sourceError}");
+
+                sourcePluginSuccess = sourceProcess.ExitCode == 0 || sourceOutput.Contains("Successfully installed") || sourceOutput.Contains("already");
+            }
+            catch (Exception sourceEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"BestSource installation warning: {sourceEx.Message}");
+                sourcePluginSuccess = false;
+            }
+
+            // vs-mlrt is NOT in vsrepo - download from GitHub releases
+            bool mlrtSuccess = false;
+            try
+            {
+                mlrtSuccess = await DownloadAndInstallVsMLRTFromGitHub();
+            }
+            catch (Exception mlrtEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"vs-mlrt installation error: {mlrtEx.Message}");
+                Snackbar.Add($"vs-mlrt installation failed: {mlrtEx.Message}", Severity.Error);
+                mlrtSuccess = false;
+            }
+
+            if (sourcePluginSuccess && mlrtSuccess)
+            {
+                Snackbar.Add("BestSource and vs-mlrt installed successfully! Models will download on first use (~100-500MB).", Severity.Success);
+                await DetectVsMLRT(); // Refresh detection
+            }
+            else if (sourcePluginSuccess)
+            {
+                Snackbar.Add("BestSource installed successfully! vs-mlrt installation failed - see error above.", Severity.Warning);
+            }
+            else if (mlrtSuccess)
+            {
+                Snackbar.Add("vs-mlrt installed successfully! BestSource may need manual installation.", Severity.Warning);
+                await DetectVsMLRT(); // Refresh detection
+            }
+            else
+            {
+                Snackbar.Add("Installation incomplete. Check errors above.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error installing vs-mlrt: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task<bool> DownloadAndInstallVsMLRTFromGitHub()
+    {
+        try
+        {
+            Snackbar.Add("Downloading vs-mlrt from GitHub... This may take a minute.", Severity.Info);
+
+            // Use GitHub API to get latest release
+            using var httpClient = new System.Net.Http.HttpClient();
+            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("ShotcutRandomizer/1.0");
+
+            var apiUrl = "https://api.github.com/repos/AmusementClub/vs-mlrt/releases/latest";
+            var response = await httpClient.GetStringAsync(apiUrl);
+
+            // Parse JSON to find download URL for CUDA version
+            var jsonDoc = System.Text.Json.JsonDocument.Parse(response);
+            var assets = jsonDoc.RootElement.GetProperty("assets");
+
+            string? downloadUrl = null;
+            string? fileName = null;
+
+            foreach (var asset in assets.EnumerateArray())
+            {
+                var name = asset.GetProperty("name").GetString();
+                // Look for TensorRT version first (best for NVIDIA RTX GPUs)
+                // Then fall back to CUDA version if TensorRT not found
+                if (name != null && name.Contains("windows", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Priority 1: TensorRT version (vsmlrt-windows-x64-tensorrt.vXX.XX.7z)
+                    if (name.Contains("tensorrt", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".7z"))
+                    {
+                        downloadUrl = asset.GetProperty("browser_download_url").GetString();
+                        fileName = name;
+                        break;
+                    }
+                    // Priority 2: CUDA version (vsmlrt-windows-x64-cuda.vXX.XX.7z)
+                    else if (downloadUrl == null && name.Contains("cuda", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".7z"))
+                    {
+                        downloadUrl = asset.GetProperty("browser_download_url").GetString();
+                        fileName = name;
+                        // Don't break - keep looking for TensorRT
+                    }
+                }
+            }
+
+            if (downloadUrl == null)
+            {
+                Snackbar.Add("Could not find vs-mlrt Windows release on GitHub. Please check your internet connection.", Severity.Error);
+                return false;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"Downloading vs-mlrt from: {downloadUrl}");
+            Snackbar.Add($"Downloading {fileName}...", Severity.Info);
+
+            // Download the archive
+            var tempPath = System.IO.Path.GetTempPath();
+            var downloadPath = System.IO.Path.Combine(tempPath, fileName ?? "vsmlrt.zip");
+
+            var fileBytes = await httpClient.GetByteArrayAsync(downloadUrl);
+            await System.IO.File.WriteAllBytesAsync(downloadPath, fileBytes);
+
+            System.Diagnostics.Debug.WriteLine($"Downloaded to: {downloadPath} ({fileBytes.Length / 1024 / 1024} MB)");
+            Snackbar.Add("Download complete! Extracting...", Severity.Info);
+
+            // Extract the archive using SharpCompress (supports all formats)
+            var extractPath = System.IO.Path.Combine(tempPath, "vsmlrt_extract");
+            if (System.IO.Directory.Exists(extractPath))
+            {
+                System.IO.Directory.Delete(extractPath, true);
+            }
+            System.IO.Directory.CreateDirectory(extractPath);
+
+            // Priority: WinRAR > 7-Zip > SharpCompress
+            // WinRAR and 7-Zip are 10-15x faster than SharpCompress
+            bool extracted = false;
+            string? extractorName = null;
+
+            // Try WinRAR first (fastest)
+            var winRarPath = FindWinRarExecutable();
+            if (winRarPath != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"Using WinRAR for extraction: {winRarPath}");
+                Snackbar.Add("Extracting with WinRAR (fastest)...", Severity.Info);
+                extractorName = "WinRAR";
+
+                try
+                {
+                    var process = new System.Diagnostics.Process
+                    {
+                        StartInfo = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = winRarPath,
+                            Arguments = $"x -y \"{downloadPath}\" \"{extractPath}\\\"",
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        }
+                    };
+
+                    process.Start();
+                    await process.WaitForExitAsync();
+
+                    if (process.ExitCode == 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine("WinRAR extraction successful");
+                        extracted = true;
+                    }
+                    else
+                    {
+                        var error = await process.StandardError.ReadToEndAsync();
+                        System.Diagnostics.Debug.WriteLine($"WinRAR extraction failed: {error}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"WinRAR extraction error: {ex.Message}");
+                }
+            }
+
+            // Try 7-Zip if WinRAR failed or not found
+            if (!extracted)
+            {
+                var sevenZipPath = Find7ZipExecutable();
+                if (sevenZipPath != null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Using 7-Zip for extraction: {sevenZipPath}");
+                    Snackbar.Add("Extracting with 7-Zip (fast)...", Severity.Info);
+                    extractorName = "7-Zip";
+
+                    try
+                    {
+                        var process = new System.Diagnostics.Process
+                        {
+                            StartInfo = new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = sevenZipPath,
+                                Arguments = $"x \"{downloadPath}\" -y -o\"{extractPath}\"",
+                                RedirectStandardOutput = true,
+                                RedirectStandardError = true,
+                                UseShellExecute = false,
+                                CreateNoWindow = true
+                            }
+                        };
+
+                        process.Start();
+                        await process.WaitForExitAsync();
+
+                        if (process.ExitCode == 0)
+                        {
+                            System.Diagnostics.Debug.WriteLine("7-Zip extraction successful");
+                            extracted = true;
+                        }
+                        else
+                        {
+                            var error = await process.StandardError.ReadToEndAsync();
+                            System.Diagnostics.Debug.WriteLine($"7-Zip extraction failed: {error}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"7-Zip extraction error: {ex.Message}");
+                    }
+                }
+            }
+
+            // Fall back to SharpCompress if WinRAR and 7-Zip failed or not found
+            if (!extracted)
+            {
+                System.Diagnostics.Debug.WriteLine("Falling back to SharpCompress (slower but reliable)...");
+                Snackbar.Add("Extracting with SharpCompress (slower, please wait)...", Severity.Warning);
+                extractorName = "SharpCompress";
+
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine($"Starting extraction of {downloadPath}...");
+
+                    using (var archive = ArchiveFactory.Open(downloadPath))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Archive opened, extracting {archive.Entries.Count()} entries...");
+
+                        int extractedCount = 0;
+                        foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
+                        {
+                            entry.WriteToDirectory(extractPath, new ExtractionOptions()
+                            {
+                                ExtractFullPath = true,
+                                Overwrite = true
+                            });
+                            extractedCount++;
+
+                            // Log progress every 10 files
+                            if (extractedCount % 10 == 0)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Extracted {extractedCount} files...");
+                            }
+                        }
+
+                        System.Diagnostics.Debug.WriteLine($"Extraction complete! Total files: {extractedCount}");
+                    }
+
+                    System.Diagnostics.Debug.WriteLine($"Extracted to: {extractPath}");
+                    extracted = true;
+                }
+                catch (Exception extractEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Extraction error: {extractEx}");
+                    Snackbar.Add($"Extraction failed: {extractEx.Message}", Severity.Error);
+                    return false;
+                }
+            }
+
+            if (extracted)
+            {
+                System.Diagnostics.Debug.WriteLine($"Extraction completed using {extractorName}");
+                Snackbar.Add($"Extraction complete ({extractorName})! Installing plugins...", Severity.Info);
+            }
+
+            // Find all DLL files in the extracted folder
+            var dllFiles = System.IO.Directory.GetFiles(extractPath, "*.dll", System.IO.SearchOption.AllDirectories);
+
+            if (dllFiles.Length == 0)
+            {
+                Snackbar.Add("No DLL files found in vs-mlrt archive.", Severity.Error);
+                return false;
+            }
+
+            // Determine VapourSynth plugins directory
+            // ALWAYS prefer user's AppData folder to avoid permission issues
+            // VapourSynth loads plugins from both locations automatically
+            var userPluginsDir = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                @"VapourSynth\plugins64");
+
+            // Create user plugins directory if it doesn't exist
+            if (!System.IO.Directory.Exists(userPluginsDir))
+            {
+                System.IO.Directory.CreateDirectory(userPluginsDir);
+            }
+
+            var pluginsDir = userPluginsDir;
+
+            System.Diagnostics.Debug.WriteLine($"Installing to: {pluginsDir}");
+
+            // Copy all DLL files to plugins directory
+            int copiedCount = 0;
+            foreach (var dllFile in dllFiles)
+            {
+                var fileName2 = System.IO.Path.GetFileName(dllFile);
+                var destPath = System.IO.Path.Combine(pluginsDir, fileName2);
+
+                try
+                {
+                    System.IO.File.Copy(dllFile, destPath, overwrite: true);
+                    System.Diagnostics.Debug.WriteLine($"Copied: {fileName2}");
+                    copiedCount++;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to copy {fileName2}: {ex.Message}");
+                }
+            }
+
+            if (copiedCount > 0)
+            {
+                Snackbar.Add($"vs-mlrt DLLs installed ({copiedCount} plugins)! Installing Python script...", Severity.Info);
+
+                // Step 3: Install vsmlrt.py Python script to Python site-packages
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine("Installing vsmlrt.py Python script...");
+
+                    // Find vsmlrt.py in the extracted files (BEFORE cleanup!)
+                    var pythonScripts = System.IO.Directory.GetFiles(extractPath, "vsmlrt.py", System.IO.SearchOption.AllDirectories);
+
+                    if (pythonScripts.Length > 0)
+                    {
+                        var vsmlrtScript = pythonScripts[0];
+                        System.Diagnostics.Debug.WriteLine($"Found vsmlrt.py at: {vsmlrtScript}");
+
+                        // Detect Python's user site-packages path programmatically
+                        string? userSitePackages = null;
+
+                        // Try to get site-packages path from Python itself
+                        var pythonCommands = new[] { "python", "python3" };
+                        foreach (var pythonCmd in pythonCommands)
+                        {
+                            try
+                            {
+                                var process = new System.Diagnostics.Process
+                                {
+                                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                                    {
+                                        FileName = pythonCmd,
+                                        Arguments = "-c \"import site; print(site.getusersitepackages())\"",
+                                        RedirectStandardOutput = true,
+                                        RedirectStandardError = true,
+                                        UseShellExecute = false,
+                                        CreateNoWindow = true
+                                    }
+                                };
+
+                                process.Start();
+                                var output = process.StandardOutput.ReadToEnd().Trim();
+                                process.WaitForExit(5000);
+
+                                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+                                {
+                                    userSitePackages = output;
+                                    System.Diagnostics.Debug.WriteLine($"Detected Python site-packages via {pythonCmd}: {userSitePackages}");
+                                    break;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Failed to detect site-packages via {pythonCmd}: {ex.Message}");
+                            }
+                        }
+
+                        // Fallback: If Python detection failed, try common paths
+                        if (string.IsNullOrEmpty(userSitePackages))
+                        {
+                            System.Diagnostics.Debug.WriteLine("Python site-packages detection failed, trying fallback paths...");
+
+                            var fallbackPaths = new[]
+                            {
+                                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Python", "Python313", "site-packages"),
+                                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Python", "Python312", "site-packages"),
+                                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Python", "Python311", "site-packages"),
+                                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Python", "Python310", "site-packages")
+                            };
+
+                            foreach (var fallbackPath in fallbackPaths)
+                            {
+                                if (System.IO.Directory.Exists(fallbackPath))
+                                {
+                                    userSitePackages = fallbackPath;
+                                    System.Diagnostics.Debug.WriteLine($"Using fallback site-packages path: {userSitePackages}");
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Copy to BOTH VapourSynth scripts folder AND Python site-packages
+                        // VapourSynth uses its own Python environment and looks in scripts folder
+
+                        // 1. Copy to VapourSynth scripts folder (CRITICAL - this is what VapourSynth uses!)
+                        var vapourSynthScriptsDir = System.IO.Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                            @"VapourSynth\scripts");
+
+                        if (!System.IO.Directory.Exists(vapourSynthScriptsDir))
+                        {
+                            System.IO.Directory.CreateDirectory(vapourSynthScriptsDir);
+                            System.Diagnostics.Debug.WriteLine($"Created VapourSynth scripts directory: {vapourSynthScriptsDir}");
+                        }
+
+                        var vsScriptPath = System.IO.Path.Combine(vapourSynthScriptsDir, "vsmlrt.py");
+                        System.IO.File.Copy(vsmlrtScript, vsScriptPath, overwrite: true);
+                        System.Diagnostics.Debug.WriteLine($"✅ Copied vsmlrt.py to VapourSynth scripts: {vsScriptPath}");
+
+                        // 2. Also copy to Python site-packages (for standalone Python usage)
+                        if (!string.IsNullOrEmpty(userSitePackages))
+                        {
+                            if (!System.IO.Directory.Exists(userSitePackages))
+                            {
+                                System.IO.Directory.CreateDirectory(userSitePackages);
+                                System.Diagnostics.Debug.WriteLine($"Created site-packages directory: {userSitePackages}");
+                            }
+
+                            var destScript = System.IO.Path.Combine(userSitePackages, "vsmlrt.py");
+                            System.IO.File.Copy(vsmlrtScript, destScript, overwrite: true);
+                            System.Diagnostics.Debug.WriteLine($"✅ Copied vsmlrt.py to Python site-packages: {destScript}");
+                        }
+
+                        Snackbar.Add("vs-mlrt installed successfully (DLLs + Python module)!", Severity.Success);
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine("vsmlrt.py not found in extracted files");
+                        Snackbar.Add("vs-mlrt DLLs installed, but vsmlrt.py script not found in archive", Severity.Warning);
+                    }
+                }
+                catch (Exception scriptEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"❌ Error installing vsmlrt.py script: {scriptEx.Message}");
+                    Snackbar.Add("vs-mlrt DLLs installed, but Python script installation failed", Severity.Warning);
+                }
+
+                // Step 4: Install standard NVIDIA TensorRT for maximum performance
+                // NOTE: Standard TensorRT provides full CUBLAS tactic source support
+                // TensorRT-RTX has limited tactic source support and causes compatibility issues
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine("Checking CUDA driver version...");
+
+                    // Check CUDA version via nvidia-smi
+                    bool cudaVersionSufficient = false;
+                    string cudaVersion = "Unknown";
+
+                    try
+                    {
+                        var nvidiaSmiProcess = new System.Diagnostics.Process
+                        {
+                            StartInfo = new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = "nvidia-smi",
+                                Arguments = "--query-gpu=driver_version --format=csv,noheader",
+                                RedirectStandardOutput = true,
+                                RedirectStandardError = true,
+                                UseShellExecute = false,
+                                CreateNoWindow = true
+                            }
+                        };
+
+                        nvidiaSmiProcess.Start();
+                        var driverVersion = nvidiaSmiProcess.StandardOutput.ReadToEnd().Trim();
+                        nvidiaSmiProcess.WaitForExit();
+
+                        // Get CUDA version from nvidia-smi
+                        var nvidiaSmiCudaProcess = new System.Diagnostics.Process
+                        {
+                            StartInfo = new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = "nvidia-smi",
+                                RedirectStandardOutput = true,
+                                RedirectStandardError = true,
+                                UseShellExecute = false,
+                                CreateNoWindow = true
+                            }
+                        };
+
+                        nvidiaSmiCudaProcess.Start();
+                        var nvidiaSmiOutput = nvidiaSmiCudaProcess.StandardOutput.ReadToEnd();
+                        nvidiaSmiCudaProcess.WaitForExit();
+
+                        // Parse CUDA version from nvidia-smi output (e.g., "CUDA Version: 12.8")
+                        var cudaMatch = System.Text.RegularExpressions.Regex.Match(nvidiaSmiOutput, @"CUDA Version:\s+(\d+\.\d+)");
+                        if (cudaMatch.Success)
+                        {
+                            cudaVersion = cudaMatch.Groups[1].Value;
+                            var cudaVersionParts = cudaVersion.Split('.');
+                            if (cudaVersionParts.Length >= 2)
+                            {
+                                var majorVersion = int.Parse(cudaVersionParts[0]);
+                                cudaVersionSufficient = majorVersion >= 13;
+                            }
+                        }
+
+                        System.Diagnostics.Debug.WriteLine($"NVIDIA Driver: {driverVersion}, CUDA: {cudaVersion}");
+
+                        if (!cudaVersionSufficient)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"⚠️ CUDA {cudaVersion} detected - TensorRT 10.13.3.9 requires CUDA 13.0+");
+                            Snackbar.Add($"⚠️ Update NVIDIA drivers! Current CUDA: {cudaVersion}, Required: 13.0+", Severity.Warning, config =>
+                            {
+                                config.VisibleStateDuration = 10000; // Show for 10 seconds
+                            });
+
+                            // Still continue with installation, but warn user
+                            System.Diagnostics.Debug.WriteLine("TensorRT installation will continue, but may fail at runtime without driver update");
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine($"✅ CUDA {cudaVersion} is sufficient for TensorRT 10.13.3.9");
+                        }
+                    }
+                    catch (Exception cudaCheckEx)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Could not check CUDA version: {cudaCheckEx.Message}");
+                        // Continue anyway - nvidia-smi might not be in PATH
+                    }
+
+                    System.Diagnostics.Debug.WriteLine("Looking for NVIDIA TensorRT installation...");
+                    Snackbar.Add("Looking for NVIDIA TensorRT...", Severity.Info);
+
+                    // Look for TensorRT in Downloads folder
+                    // Expected pattern: TensorRT-10.13.3.9.Windows.win10.cuda-13.0\TensorRT-10.13.3.9
+                    var downloadsPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                    string? tensorrtRootPath = null;
+
+                    // Search for TensorRT-10.* folders
+                    if (System.IO.Directory.Exists(downloadsPath))
+                    {
+                        var tensorrtFolders = System.IO.Directory.GetDirectories(downloadsPath, "TensorRT-10.*", System.IO.SearchOption.TopDirectoryOnly);
+
+                        foreach (var folder in tensorrtFolders)
+                        {
+                            // Look for nested TensorRT folder (e.g., TensorRT-10.13.3.9.Windows.win10.cuda-13.0\TensorRT-10.13.3.9)
+                            var nestedFolders = System.IO.Directory.GetDirectories(folder, "TensorRT-*", System.IO.SearchOption.TopDirectoryOnly);
+                            if (nestedFolders.Length > 0)
+                            {
+                                // Verify it has bin and lib folders
+                                var binPath = System.IO.Path.Combine(nestedFolders[0], "bin");
+                                var libPath = System.IO.Path.Combine(nestedFolders[0], "lib");
+
+                                if (System.IO.Directory.Exists(binPath) && System.IO.Directory.Exists(libPath))
+                                {
+                                    tensorrtRootPath = nestedFolders[0];
+                                    System.Diagnostics.Debug.WriteLine($"Found TensorRT installation: {tensorrtRootPath}");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (tensorrtRootPath != null)
+                    {
+                        var binFolder = System.IO.Path.Combine(tensorrtRootPath, "bin");
+                        var libFolder = System.IO.Path.Combine(tensorrtRootPath, "lib");
+
+                        // Create vsmlrt-cuda subfolder for TensorRT files
+                        var vsmlrtCudaDir = System.IO.Path.Combine(userPluginsDir, "vsmlrt-cuda");
+                        if (!System.IO.Directory.Exists(vsmlrtCudaDir))
+                        {
+                            System.IO.Directory.CreateDirectory(vsmlrtCudaDir);
+                            System.Diagnostics.Debug.WriteLine($"Created vsmlrt-cuda directory: {vsmlrtCudaDir}");
+                        }
+
+                        int filesCopied = 0;
+
+                        // Copy trtexec.exe from bin folder
+                        var trtexecPath = System.IO.Path.Combine(binFolder, "trtexec.exe");
+                        if (System.IO.File.Exists(trtexecPath))
+                        {
+                            var destTrtexec = System.IO.Path.Combine(vsmlrtCudaDir, "trtexec.exe");
+                            System.IO.File.Copy(trtexecPath, destTrtexec, overwrite: true);
+                            System.Diagnostics.Debug.WriteLine("✅ Copied trtexec.exe");
+                            filesCopied++;
+                        }
+
+                        // Copy all DLLs from lib folder
+                        var tensorrtDlls = System.IO.Directory.GetFiles(libFolder, "*.dll", System.IO.SearchOption.TopDirectoryOnly);
+                        foreach (var dll in tensorrtDlls)
+                        {
+                            var dllFileName = System.IO.Path.GetFileName(dll);
+                            var destPath = System.IO.Path.Combine(vsmlrtCudaDir, dllFileName);
+
+                            try
+                            {
+                                System.IO.File.Copy(dll, destPath, overwrite: true);
+                                System.Diagnostics.Debug.WriteLine($"Copied TensorRT DLL: {dllFileName}");
+                                filesCopied++;
+                            }
+                            catch (Exception copyEx)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Failed to copy {dllFileName}: {copyEx.Message}");
+                            }
+                        }
+
+                        // Also copy all existing DLLs from plugins64 to vsmlrt-cuda subfolder
+                        // (cudart*.dll, etc. that were installed with vs-mlrt)
+                        var existingDlls = System.IO.Directory.GetFiles(userPluginsDir, "*.dll", System.IO.SearchOption.TopDirectoryOnly);
+                        foreach (var dll in existingDlls)
+                        {
+                            var existingDllName = System.IO.Path.GetFileName(dll);
+                            var destPath = System.IO.Path.Combine(vsmlrtCudaDir, existingDllName);
+
+                            try
+                            {
+                                // Don't overwrite if already exists (TensorRT DLLs have priority)
+                                if (!System.IO.File.Exists(destPath))
+                                {
+                                    System.IO.File.Copy(dll, destPath, overwrite: false);
+                                }
+                            }
+                            catch
+                            {
+                                // Ignore copy errors for existing DLLs
+                            }
+                        }
+
+                        System.Diagnostics.Debug.WriteLine($"✅ Installed {filesCopied} TensorRT files to vsmlrt-cuda folder");
+                        Snackbar.Add($"NVIDIA TensorRT installed ({filesCopied} files) - Maximum performance enabled!", Severity.Success);
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine("⚠️ TensorRT not found in Downloads folder");
+                        Snackbar.Add("TensorRT not found - download from NVIDIA Developer website", Severity.Warning);
+
+                        // Log instructions for manual download
+                        System.Diagnostics.Debug.WriteLine("To install TensorRT:");
+                        System.Diagnostics.Debug.WriteLine("1. Download TensorRT 10.13.3.9 for Windows/CUDA 13.0 from: https://developer.nvidia.com/tensorrt");
+                        System.Diagnostics.Debug.WriteLine("2. Extract to Downloads folder");
+                        System.Diagnostics.Debug.WriteLine("3. Re-run this installer");
+                    }
+                }
+                catch (Exception tensorrtEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"❌ TensorRT installation error: {tensorrtEx.Message}");
+                    Snackbar.Add("TensorRT installation failed - CUDA backend will be used instead", Severity.Warning);
+                }
+
+                // Disable broken plugins that cause vsmlrt import to fail
+                // vsov (OpenVINO) and vsort (ONNX Runtime) often have missing dependencies
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine("Disabling plugins with missing dependencies...");
+
+                    // Disable vsov.dll if it exists (requires tbb12.dll and openvino.dll)
+                    var vsovPath = System.IO.Path.Combine(userPluginsDir, "vsov.dll");
+                    if (System.IO.File.Exists(vsovPath))
+                    {
+                        var vsovDisabledPath = System.IO.Path.Combine(userPluginsDir, "vsov.dll.disabled");
+                        System.IO.File.Move(vsovPath, vsovDisabledPath, overwrite: true);
+                        System.Diagnostics.Debug.WriteLine($"✅ Disabled vsov.dll (missing OpenVINO dependencies)");
+                    }
+
+                    // Also check vsmlrt-cuda subfolder
+                    var cudaPluginsDir = System.IO.Path.Combine(userPluginsDir, "vsmlrt-cuda");
+                    var vsovCudaPath = System.IO.Path.Combine(cudaPluginsDir, "vsov.dll");
+                    if (System.IO.File.Exists(vsovCudaPath))
+                    {
+                        var vsovCudaDisabledPath = System.IO.Path.Combine(cudaPluginsDir, "vsov.dll.disabled");
+                        System.IO.File.Move(vsovCudaPath, vsovCudaDisabledPath, overwrite: true);
+                        System.Diagnostics.Debug.WriteLine($"✅ Disabled vsov.dll in vsmlrt-cuda folder");
+                    }
+
+                    // Optionally disable vsort.dll if problematic (requires DirectML.dll and onnxruntime.dll)
+                    // Note: vsort warnings are non-fatal, so we only disable if it becomes a problem
+                    // Users can manually re-enable by renaming .disabled back to .dll if needed
+                }
+                catch (Exception disableEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Warning: Failed to disable broken plugins: {disableEx.Message}");
+                    // Non-fatal - continue with installation
+                }
+
+                // Step 5: Download Real-CUGAN models
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine("Downloading Real-CUGAN models...");
+                    Snackbar.Add("Downloading Real-CUGAN AI models...", Severity.Info);
+
+                    // Create models directory
+                    var modelsDir = System.IO.Path.Combine(userPluginsDir, "models", "cugan");
+                    System.IO.Directory.CreateDirectory(modelsDir);
+
+                    // Download model pack from vs-mlrt releases
+                    var modelUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/model-20211209/cugan_v2.7z";
+                    var modelDownloadPath = System.IO.Path.Combine(tempPath, "cugan_models.7z");
+
+                    using (var client = new HttpClient())
+                    {
+                        client.Timeout = TimeSpan.FromMinutes(10);
+                        var modelResponse = await client.GetAsync(modelUrl);
+                        modelResponse.EnsureSuccessStatusCode();
+
+                        await using var fs = new FileStream(modelDownloadPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                        await modelResponse.Content.CopyToAsync(fs);
+                    }
+
+                    System.Diagnostics.Debug.WriteLine($"Downloaded Real-CUGAN models: {new FileInfo(modelDownloadPath).Length / 1024 / 1024}MB");
+
+                    // Extract models using same extraction logic
+                    var modelExtractPath = System.IO.Path.Combine(tempPath, "cugan_models");
+                    System.IO.Directory.CreateDirectory(modelExtractPath);
+
+                    bool modelExtracted = false;
+
+                    // Try WinRAR first
+                    if (winRarPath != null)
+                    {
+                        var modelExtractProc = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = winRarPath,
+                            Arguments = $"x -y \"{modelDownloadPath}\" \"{modelExtractPath}\"",
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+
+                        using var modelProc = System.Diagnostics.Process.Start(modelExtractProc);
+                        if (modelProc != null)
+                        {
+                            await modelProc.WaitForExitAsync();
+                            modelExtracted = modelProc.ExitCode == 0;
+                        }
+                    }
+
+                    // Try 7-Zip if WinRAR failed
+                    if (!modelExtracted)
+                    {
+                        var sevenZipPathForModels = Find7ZipExecutable();
+                        if (sevenZipPathForModels != null)
+                        {
+                            var modelExtractProc = new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = sevenZipPathForModels,
+                                Arguments = $"x -y -o\"{modelExtractPath}\" \"{modelDownloadPath}\"",
+                                UseShellExecute = false,
+                                CreateNoWindow = true
+                            };
+
+                            using var modelProc = System.Diagnostics.Process.Start(modelExtractProc);
+                            if (modelProc != null)
+                            {
+                                await modelProc.WaitForExitAsync();
+                                modelExtracted = modelProc.ExitCode == 0;
+                            }
+                        }
+                    }
+
+                    // Try SharpCompress as fallback
+                    if (!modelExtracted)
+                    {
+                        try
+                        {
+                            using var archive = SharpCompress.Archives.SevenZip.SevenZipArchive.Open(modelDownloadPath);
+                            foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
+                            {
+                                entry.WriteToDirectory(modelExtractPath, new SharpCompress.Common.ExtractionOptions { ExtractFullPath = true, Overwrite = true });
+                            }
+                            modelExtracted = true;
+                        }
+                        catch (Exception scEx)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"SharpCompress model extraction failed: {scEx.Message}");
+                        }
+                    }
+
+                    if (modelExtracted)
+                    {
+                        // Copy all .onnx files from extracted folder to models/cugan
+                        var onnxFiles = System.IO.Directory.GetFiles(modelExtractPath, "*.onnx", System.IO.SearchOption.AllDirectories);
+                        int modelsCopied = 0;
+
+                        foreach (var onnxFile in onnxFiles)
+                        {
+                            var modelFileName = System.IO.Path.GetFileName(onnxFile);
+                            var destPath = System.IO.Path.Combine(modelsDir, modelFileName);
+
+                            try
+                            {
+                                System.IO.File.Copy(onnxFile, destPath, overwrite: true);
+                                System.Diagnostics.Debug.WriteLine($"Copied model: {modelFileName}");
+                                modelsCopied++;
+                            }
+                            catch (Exception copyEx)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Failed to copy {modelFileName}: {copyEx.Message}");
+                            }
+                        }
+
+                        System.Diagnostics.Debug.WriteLine($"✅ Installed {modelsCopied} Real-CUGAN model files");
+                        Snackbar.Add($"Real-CUGAN models installed ({modelsCopied} files)", Severity.Success);
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine("❌ Model extraction failed");
+                        Snackbar.Add("Model installation failed - models will download on first use", Severity.Warning);
+                    }
+
+                    // Cleanup model files
+                    try
+                    {
+                        System.IO.File.Delete(modelDownloadPath);
+                        System.IO.Directory.Delete(modelExtractPath, true);
+                    }
+                    catch { }
+                }
+                catch (Exception modelEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"❌ Model installation error: {modelEx.Message}");
+                    Snackbar.Add("Model installation failed - models will download on first use", Severity.Warning);
+                    // Non-fatal - vs-mlrt will download models on first use
+                }
+
+                // Cleanup vs-mlrt files (after copying everything)
+                try
+                {
+                    System.IO.File.Delete(downloadPath);
+                    System.IO.Directory.Delete(extractPath, true);
+                }
+                catch
+                {
+                    // Ignore cleanup errors
+                }
+
+                return true;
+            }
+            else
+            {
+                Snackbar.Add("Failed to copy vs-mlrt plugins to VapourSynth directory.", Severity.Error);
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"DownloadAndInstallVsMLRTFromGitHub error: {ex.Message}");
+            Snackbar.Add($"Failed to download/install vs-mlrt: {ex.Message}", Severity.Error);
+            return false;
+        }
+    }
+}

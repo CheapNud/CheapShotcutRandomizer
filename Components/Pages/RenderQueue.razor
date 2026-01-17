@@ -1,0 +1,701 @@
+@page "/render-queue"
+@using CheapShotcutRandomizer.Components.Shared
+@inject IRenderQueueService QueueService
+@inject IRenderJobRepository Repository
+@inject HardwareDetectionService HardwareService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="3">
+        <!-- Page Title -->
+        <MudText Typo="Typo.h4">Render Queue</MudText>
+
+        <!-- Hardware Capabilities Card (Full Width at Top) -->
+        @if (_isLoadingHardware)
+        {
+            <MudPaper Class="pa-4">
+                <MudStack Spacing="2">
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="30%" Height="32px" />
+                    <MudDivider />
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="60%" />
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="55%" />
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="60px" />
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="80%" />
+                </MudStack>
+            </MudPaper>
+        }
+        else if (_hardware != null)
+        {
+            <HardwareInfoCard Hardware="_hardware" />
+        }
+
+        <!-- Queue Status and Control -->
+        <MudPaper Class="pa-4">
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        @if (_isQueuePaused)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.PauseCircle" Color="Color.Warning" Size="Size.Large" />
+                            <MudStack Spacing="0">
+                                <MudText Typo="Typo.h6" Color="Color.Warning">Queue PAUSED</MudText>
+                                <MudText Typo="Typo.caption">Jobs will not start processing until queue is started</MudText>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Color="Color.Success" Size="Size.Large" />
+                            <MudStack Spacing="0">
+                                <MudText Typo="Typo.h6" Color="Color.Success">Queue RUNNING</MudText>
+                                <MudText Typo="Typo.caption">Jobs will start processing automatically</MudText>
+                            </MudStack>
+                        }
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="2">
+                        @if (_isQueuePaused)
+                        {
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Success"
+                                       StartIcon="@Icons.Material.Filled.PlayArrow"
+                                       OnClick="@StartQueue"
+                                       Disabled="@_isLoadingJobs">
+                                Start Queue
+                            </MudButton>
+                        }
+                        else
+                        {
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Warning"
+                                       StartIcon="@Icons.Material.Filled.Pause"
+                                       OnClick="@StopQueue"
+                                       Disabled="@_isLoadingJobs">
+                                Pause Queue
+                            </MudButton>
+                        }
+
+                        @if (_queueStats != null)
+                        {
+                            <MudChip T="string" Color="Color.Info" Size="Size.Small">
+                                @_queueStats.PendingCount pending
+                            </MudChip>
+                            @if (_queueStats.RunningCount > 0)
+                            {
+                                <MudChip T="string" Color="Color.Primary" Size="Size.Small">
+                                    @_queueStats.RunningCount running
+                                </MudChip>
+                            }
+                        }
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <!-- Action Buttons -->
+        <MudPaper Class="pa-4">
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="@OpenAddJobDialog"
+                           Disabled="@_isLoadingJobs">
+                    Add Job
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="@RefreshJobs"
+                           Disabled="@_isLoadingJobs">
+                    Refresh
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.DeleteSweep"
+                           OnClick="@HandleClearAllJobs"
+                           Disabled="@(_isLoadingJobs || _totalJobCount == 0)">
+                    Clear All Jobs
+                </MudButton>
+                <MudSpacer />
+                @if (_activeJobs.Count > 0)
+                {
+                    <MudChip T="string" Color="Color.Primary" Size="Size.Medium">
+                        @_activeJobs.Count Active Job@(_activeJobs.Count != 1 ? "s" : "")
+                    </MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+
+        <!-- Tabs for different job states -->
+        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+            <MudTabPanel Text="Active" Icon="@Icons.Material.Filled.PlayArrow" BadgeData="@_activeJobs.Count" BadgeColor="Color.Primary">
+                @if (_isLoadingJobs)
+                {
+                    <!-- Skeleton placeholders while loading -->
+                    <MudStack Spacing="2">
+                        @for (int i = 0; i < 2; i++)
+                        {
+                            <MudPaper Class="pa-4">
+                                <MudGrid>
+                                    <MudItem xs="12">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudSkeleton SkeletonType="SkeletonType.Circle" Width="24px" Height="24px" />
+                                            <MudSkeleton SkeletonType="SkeletonType.Text" Width="40%" />
+                                            <MudSpacer />
+                                            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="80px" Height="24px" />
+                                        </MudStack>
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudSkeleton SkeletonType="SkeletonType.Text" Width="70%" />
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="10px" />
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudStack Row="true" Spacing="2">
+                                            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="80px" Height="36px" />
+                                            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="80px" Height="36px" />
+                                        </MudStack>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudPaper>
+                        }
+                    </MudStack>
+                }
+                else if (_activeJobs.Count == 0)
+                {
+                    <!-- Improved empty state -->
+                    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 300px;" Spacing="4">
+                        <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Size="Size.Large" Color="Color.Default" Style="font-size: 96px; opacity: 0.3;" />
+                        <MudText Typo="Typo.h5" Align="Align.Center">Ready to render!</MudText>
+                        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Default">
+                            Click "Add Job" to get started with your first video render.
+                        </MudText>
+                        <MudPaper Class="pa-4" Style="background-color: var(--mud-palette-background-grey); max-width: 600px;">
+                            <MudText Typo="Typo.body2" Align="Align.Center">
+                                <strong>Quick Tip:</strong> Make sure your source video is ready and choose your desired output format.
+                                @if (_hardware?.NvencAvailable == true)
+                                {
+                                    <text>Your NVENC hardware acceleration will make rendering fast!</text>
+                                }
+                            </MudText>
+                        </MudPaper>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudStack Spacing="2">
+                        @foreach (var job in _activeJobs)
+                        {
+                            <RenderJobCard Job="@job"
+                                           OnPause="@HandlePause"
+                                           OnResume="@HandleResume"
+                                           OnCancel="@HandleCancel"
+                                           OnRetry="@HandleRetry"
+                                           OnDelete="@HandleDelete" />
+                        }
+                    </MudStack>
+                }
+            </MudTabPanel>
+
+            <MudTabPanel Text="Completed" Icon="@Icons.Material.Filled.CheckCircle" BadgeData="@_completedJobs.Count" BadgeColor="Color.Success">
+                @if (_isLoadingJobs)
+                {
+                    <!-- Skeleton placeholders while loading -->
+                    <MudStack Spacing="2">
+                        @for (int i = 0; i < 2; i++)
+                        {
+                            <MudPaper Class="pa-4">
+                                <MudGrid>
+                                    <MudItem xs="12">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudSkeleton SkeletonType="SkeletonType.Circle" Width="24px" Height="24px" />
+                                            <MudSkeleton SkeletonType="SkeletonType.Text" Width="40%" />
+                                            <MudSpacer />
+                                            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="80px" Height="24px" />
+                                        </MudStack>
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudSkeleton SkeletonType="SkeletonType.Text" Width="70%" />
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudStack Row="true" Spacing="2">
+                                            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100px" Height="36px" />
+                                        </MudStack>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudPaper>
+                        }
+                    </MudStack>
+                }
+                else if (_completedJobs.Count == 0)
+                {
+                    <!-- Improved empty state -->
+                    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 300px;" Spacing="4">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircleOutline" Size="Size.Large" Color="Color.Success" Style="font-size: 96px; opacity: 0.3;" />
+                        <MudText Typo="Typo.h5" Align="Align.Center">No completed jobs yet</MudText>
+                        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Default">
+                            Completed renders will appear here once they finish processing.
+                        </MudText>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudStack Spacing="2">
+                        @foreach (var job in _completedJobs)
+                        {
+                            <RenderJobCard Job="@job"
+                                           OnPause="@HandlePause"
+                                           OnResume="@HandleResume"
+                                           OnCancel="@HandleCancel"
+                                           OnRetry="@HandleRetry"
+                                           OnDelete="@HandleDelete" />
+                        }
+                    </MudStack>
+                }
+            </MudTabPanel>
+
+            <MudTabPanel Text="Failed" Icon="@Icons.Material.Filled.Error" BadgeData="@_failedJobs.Count" BadgeColor="Color.Error">
+                @if (_isLoadingJobs)
+                {
+                    <!-- Skeleton placeholders while loading -->
+                    <MudStack Spacing="2">
+                        @for (int i = 0; i < 2; i++)
+                        {
+                            <MudPaper Class="pa-4">
+                                <MudGrid>
+                                    <MudItem xs="12">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudSkeleton SkeletonType="SkeletonType.Circle" Width="24px" Height="24px" />
+                                            <MudSkeleton SkeletonType="SkeletonType.Text" Width="40%" />
+                                            <MudSpacer />
+                                            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="80px" Height="24px" />
+                                        </MudStack>
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudSkeleton SkeletonType="SkeletonType.Text" Width="70%" />
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudStack Row="true" Spacing="2">
+                                            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="80px" Height="36px" />
+                                            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100px" Height="36px" />
+                                        </MudStack>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudPaper>
+                        }
+                    </MudStack>
+                }
+                else if (_failedJobs.Count == 0)
+                {
+                    <!-- Improved empty state -->
+                    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 300px;" Spacing="4">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Color="Color.Success" Style="font-size: 96px; opacity: 0.3;" />
+                        <MudText Typo="Typo.h5" Align="Align.Center" Color="Color.Success">All systems go!</MudText>
+                        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Default">
+                            No failed jobs - everything is running smoothly.
+                        </MudText>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudStack Spacing="2">
+                        @foreach (var job in _failedJobs)
+                        {
+                            <RenderJobCard Job="@job"
+                                           OnPause="@HandlePause"
+                                           OnResume="@HandleResume"
+                                           OnCancel="@HandleCancel"
+                                           OnRetry="@HandleRetry"
+                                           OnDelete="@HandleDelete" />
+                        }
+                    </MudStack>
+                }
+            </MudTabPanel>
+        </MudTabs>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private List<RenderJob> _activeJobs = new();
+    private List<RenderJob> _completedJobs = new();
+    private List<RenderJob> _failedJobs = new();
+    private HardwareCapabilities? _hardware;
+    private bool _isLoadingHardware = true;
+
+    // Queue control state
+    private bool _isQueuePaused = true;
+    private QueueStatistics? _queueStats;
+    private bool _isLoadingJobs = true;
+    private System.Threading.Timer? _refreshTimer;
+    private DateTime _lastProgressUIUpdate = DateTime.MinValue;
+    private int _totalJobCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Subscribe to events for real-time updates
+        QueueService.ProgressChanged += OnProgressChanged;
+        QueueService.StatusChanged += OnStatusChanged;
+        QueueService.QueueStatusChanged += OnQueueStatusChanged;
+
+        // Get initial queue status
+        _isQueuePaused = QueueService.IsQueuePaused;
+        _queueStats = await QueueService.GetQueueStatisticsAsync();
+
+        // Run hardware detection and job loading in parallel for better performance
+        var hardwareTask = Task.Run(async () =>
+        {
+            _hardware = await HardwareService.DetectHardwareAsync();
+            _isLoadingHardware = false;
+            await InvokeAsync(StateHasChanged);
+        });
+
+        var jobsTask = Task.Run(async () =>
+        {
+            await LoadJobs();
+            _isLoadingJobs = false;
+            await InvokeAsync(StateHasChanged);
+        });
+
+        await Task.WhenAll(hardwareTask, jobsTask);
+
+        // Start polling timer as fallback (every 5 seconds - reduced from 2 to avoid UI thrashing)
+        _refreshTimer = new System.Threading.Timer(
+            async _ => await RefreshJobsInternal(),
+            null,
+            TimeSpan.Zero,
+            TimeSpan.FromSeconds(5));
+    }
+
+    private async Task LoadJobs()
+    {
+        try
+        {
+            var activeTask = QueueService.GetActiveJobsAsync();
+            var completedTask = QueueService.GetCompletedJobsAsync();
+            var failedTask = QueueService.GetFailedJobsAsync();
+            var statsTask = QueueService.GetQueueStatisticsAsync();
+
+            await Task.WhenAll(activeTask, completedTask, failedTask, statsTask);
+
+            _activeJobs = activeTask.Result.ToList();
+            _completedJobs = completedTask.Result.ToList();
+            _failedJobs = failedTask.Result.ToList();
+            _queueStats = statsTask.Result;
+            _totalJobCount = _activeJobs.Count + _completedJobs.Count + _failedJobs.Count;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading jobs: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RefreshJobs()
+    {
+        _isLoadingJobs = true;
+        StateHasChanged();
+        await LoadJobs();
+        _isLoadingJobs = false;
+        StateHasChanged();
+        Snackbar.Add("Jobs refreshed", Severity.Success);
+    }
+
+    private async Task RefreshJobsInternal()
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadJobs();
+            StateHasChanged();
+        });
+    }
+
+    private async void OnProgressChanged(object? sender, RenderProgressEventArgs e)
+    {
+        // Throttle UI updates to 100ms (10 fps max) to prevent progress bar glitching
+        var now = DateTime.UtcNow;
+        if ((now - _lastProgressUIUpdate).TotalMilliseconds < 100)
+            return;
+
+        _lastProgressUIUpdate = now;
+
+        await InvokeAsync(() =>
+        {
+            // Find job in active jobs list
+            var job = _activeJobs.FirstOrDefault(j => j.JobId == e.JobId);
+            if (job != null)
+            {
+                job.ProgressPercentage = e.ProgressPercentage;
+                job.CurrentFrame = e.CurrentFrame;
+                job.TotalFrames = e.TotalFrames;
+                job.EstimatedTimeRemaining = e.EstimatedTimeRemaining;
+                StateHasChanged();
+            }
+        });
+    }
+
+    private async void OnStatusChanged(object? sender, RenderProgressEventArgs e)
+    {
+        await InvokeAsync(async () =>
+        {
+            // Reload jobs from database when status changes
+            await LoadJobs();
+            StateHasChanged();
+
+            // Show notification
+            var message = e.Status switch
+            {
+                RenderJobStatus.Completed => "Job completed successfully!",
+                RenderJobStatus.Failed => $"Job failed: {e.ErrorMessage}",
+                RenderJobStatus.Cancelled => "Job cancelled",
+                _ => null
+            };
+
+            if (message != null)
+            {
+                var severity = e.Status == RenderJobStatus.Completed ? Severity.Success : Severity.Warning;
+                Snackbar.Add(message, severity);
+            }
+        });
+    }
+
+    private async Task OpenAddJobDialog()
+    {
+        var parameters = new DialogParameters<AddRenderJobDialog>
+        {
+            { x => x.OnJobAdded, EventCallback.Factory.Create<RenderJob>(this, HandleJobAdded) }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<AddRenderJobDialog>("Add Render Job", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is RenderJob job)
+        {
+            await HandleJobAdded(job);
+        }
+    }
+
+    private async Task HandleJobAdded(RenderJob renderJob)
+    {
+        try
+        {
+            var jobId = await QueueService.AddJobAsync(renderJob);
+            await LoadJobs();
+            StateHasChanged();
+
+            // Notify user about job addition and queue status
+            if (_isQueuePaused)
+            {
+                Snackbar.Add("Job added to queue successfully!", Severity.Success);
+                Snackbar.Add("Remember to start the queue to begin processing", Severity.Info, config =>
+                {
+                    config.RequireInteraction = true;
+                    config.Action = "Start Queue";
+                    config.ActionColor = Color.Success;
+                    config.OnClick = snackbar =>
+                    {
+                        StartQueue();
+                        return Task.CompletedTask;
+                    };
+                });
+            }
+            else
+            {
+                Snackbar.Add("Job added and will start processing soon", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error adding job: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandlePause(Guid jobId)
+    {
+        try
+        {
+            var success = await QueueService.PauseJobAsync(jobId);
+            if (success)
+            {
+                await LoadJobs();
+                StateHasChanged();
+                Snackbar.Add("Job paused", Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add("Failed to pause job", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error pausing job: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleResume(Guid jobId)
+    {
+        try
+        {
+            var success = await QueueService.ResumeJobAsync(jobId);
+            if (success)
+            {
+                await LoadJobs();
+                StateHasChanged();
+                Snackbar.Add("Job resumed", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to resume job", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error resuming job: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleCancel(Guid jobId)
+    {
+        try
+        {
+            var success = await QueueService.CancelJobAsync(jobId);
+            if (success)
+            {
+                await LoadJobs();
+                StateHasChanged();
+                Snackbar.Add("Job cancelled", Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add("Failed to cancel job", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error cancelling job: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleRetry(Guid jobId)
+    {
+        try
+        {
+            var success = await QueueService.RetryJobAsync(jobId);
+            if (success)
+            {
+                await LoadJobs();
+                StateHasChanged();
+                Snackbar.Add("Job queued for retry", Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add("Failed to retry job", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error retrying job: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleDelete(Guid jobId)
+    {
+        try
+        {
+            // Delete from database
+            await Repository.DeleteAsync(jobId);
+
+            // Reload jobs
+            await LoadJobs();
+            StateHasChanged();
+
+            Snackbar.Add("Job deleted", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error deleting job: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void StartQueue()
+    {
+        QueueService.StartQueue();
+        _isQueuePaused = false;
+        StateHasChanged();
+        Snackbar.Add("Queue started - jobs will now begin processing", Severity.Success);
+    }
+
+    private void StopQueue()
+    {
+        QueueService.StopQueue();
+        _isQueuePaused = true;
+        StateHasChanged();
+        Snackbar.Add("Queue paused - new jobs will wait until queue is started", Severity.Warning);
+    }
+
+    private async void OnQueueStatusChanged(object? sender, bool isPaused)
+    {
+        await InvokeAsync(async () =>
+        {
+            _isQueuePaused = isPaused;
+            _queueStats = await QueueService.GetQueueStatisticsAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task HandleClearAllJobs()
+    {
+        // Show confirmation dialog
+        bool? dialogResult = await DialogService.ShowMessageBox(
+            "Clear All Jobs",
+            "Are you sure you want to clear all jobs from the queue? This will cancel any running jobs and delete all completed and failed jobs. This action cannot be undone.",
+            yesText: "Clear All",
+            cancelText: "Cancel");
+
+        if (dialogResult != true)
+        {
+            return;
+        }
+
+        try
+        {
+            _isLoadingJobs = true;
+            StateHasChanged();
+
+            // Clear all jobs
+            var clearedCount = await QueueService.ClearAllJobsAsync();
+
+            // Reload jobs to update UI
+            await LoadJobs();
+            _isLoadingJobs = false;
+            StateHasChanged();
+
+            Snackbar.Add($"Successfully cleared {clearedCount} job{(clearedCount != 1 ? "s" : "")} from the queue", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            _isLoadingJobs = false;
+            StateHasChanged();
+            Snackbar.Add($"Error clearing jobs: {ex.Message}", Severity.Error);
+        }
+    }
+
+    public void Dispose()
+    {
+        // CRITICAL: Unsubscribe from events to prevent memory leaks
+        QueueService.ProgressChanged -= OnProgressChanged;
+        QueueService.StatusChanged -= OnStatusChanged;
+        QueueService.QueueStatusChanged -= OnQueueStatusChanged;
+
+        // Dispose timer
+        _refreshTimer?.Dispose();
+    }
+}

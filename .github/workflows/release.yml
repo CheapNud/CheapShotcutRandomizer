@@ -1,0 +1,188 @@
+name: Release Build and Publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 2.0.0)'
+        required: true
+        type: string
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  build-release:
+    name: Build Release Package
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        path: repo
+        fetch-depth: 0
+        submodules: recursive
+
+    - name: Checkout CheapHelpers dependency
+      uses: actions/checkout@v4
+      with:
+        repository: CheapNud/CheapHelpers
+        path: CheapHelpers
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-quality: 'preview'
+
+    - name: Extract version from tag
+      id: version
+      shell: pwsh
+      run: |
+        if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+          $version = "${{ github.event.inputs.version }}"
+        } else {
+          $version = "${{ github.ref_name }}".TrimStart('v')
+        }
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "Version: $version"
+
+    - name: Restore dependencies
+      working-directory: repo
+      run: dotnet restore CheapShotcutRandomizer.sln
+
+    - name: Build Release (Self-Contained)
+      working-directory: repo
+      run: |
+        dotnet publish CheapShotcutRandomizer.csproj `
+          --configuration Release `
+          --runtime win-x64 `
+          --self-contained true `
+          --output ./publish/win-x64 `
+          /p:PublishSingleFile=true `
+          /p:PublishTrimmed=false `
+          /p:IncludeNativeLibrariesForSelfExtract=true `
+          /p:Version=${{ steps.version.outputs.VERSION }}
+
+    - name: Build Release (Framework-Dependent)
+      working-directory: repo
+      run: |
+        dotnet publish CheapShotcutRandomizer.csproj `
+          --configuration Release `
+          --runtime win-x64 `
+          --self-contained false `
+          --output ./publish/win-x64-fd `
+          /p:Version=${{ steps.version.outputs.VERSION }}
+
+    - name: Run tests before release
+      working-directory: repo
+      run: dotnet test CheapShotcutRandomizer.Tests/CheapShotcutRandomizer.Tests.csproj --configuration Release --verbosity normal
+
+    - name: Create release package (Self-Contained)
+      shell: pwsh
+      run: |
+        $version = "${{ steps.version.outputs.VERSION }}"
+        Compress-Archive -Path repo/publish/win-x64/* -DestinationPath "./CheapShotcutRandomizer-v$version-win-x64-standalone.zip"
+
+    - name: Create release package (Framework-Dependent)
+      shell: pwsh
+      run: |
+        $version = "${{ steps.version.outputs.VERSION }}"
+        Compress-Archive -Path repo/publish/win-x64-fd/* -DestinationPath "./CheapShotcutRandomizer-v$version-win-x64.zip"
+
+    - name: Generate checksums
+      shell: pwsh
+      run: |
+        $version = "${{ steps.version.outputs.VERSION }}"
+        $standalone = Get-FileHash "CheapShotcutRandomizer-v$version-win-x64-standalone.zip" -Algorithm SHA256
+        $fd = Get-FileHash "CheapShotcutRandomizer-v$version-win-x64.zip" -Algorithm SHA256
+
+        @"
+        SHA256 Checksums:
+
+        CheapShotcutRandomizer-v$version-win-x64-standalone.zip
+        $($standalone.Hash)
+
+        CheapShotcutRandomizer-v$version-win-x64.zip
+        $($fd.Hash)
+        "@ | Out-File -FilePath checksums.txt -Encoding UTF8
+
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-packages-v${{ steps.version.outputs.VERSION }}
+        path: |
+          *.zip
+          checksums.txt
+        retention-days: 90
+
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          *.zip
+          checksums.txt
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        body: |
+          ## Cheap Shotcut Randomizer v${{ steps.version.outputs.VERSION }}
+
+          ### Installation
+
+          #### Standalone Version (Recommended for most users)
+          - Download: `CheapShotcutRandomizer-v${{ steps.version.outputs.VERSION }}-win-x64-standalone.zip`
+          - No .NET runtime installation required
+          - Larger download size (~100MB)
+          - Extract and run `CheapShotcutRandomizer.exe`
+
+          #### Framework-Dependent Version (For users with .NET 10 installed)
+          - Download: `CheapShotcutRandomizer-v${{ steps.version.outputs.VERSION }}-win-x64.zip`
+          - Requires .NET 10.0 runtime
+          - Smaller download size (~10MB)
+          - Extract and run `CheapShotcutRandomizer.exe`
+
+          ### Requirements
+          - Windows 10/11
+          - NVIDIA GPU (GTX 1060 6GB minimum, RTX 3060+ recommended)
+          - Optional: FFmpeg, Shotcut (melt), VapourSynth, Python 3.8-3.11
+
+          ### What's Changed
+          See full changelog below.
+
+          ### Verify Download Integrity
+          Check SHA256 checksums in `checksums.txt`
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-nuget:
+    name: Publish to NuGet (if applicable)
+    runs-on: windows-latest
+    if: false  # Set to true if you want to publish NuGet packages
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-quality: 'preview'
+
+    - name: Pack NuGet packages
+      run: dotnet pack CheapShotcutRandomizer.csproj --configuration Release --output ./nupkg
+
+    - name: Push to NuGet
+      run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}

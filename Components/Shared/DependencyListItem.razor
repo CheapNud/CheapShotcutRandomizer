@@ -1,0 +1,151 @@
+@using CheapShotcutRandomizer.Models
+
+<MudListItem T="string">
+    <MudCard Elevation="1" Class="mb-2">
+        <MudCardContent>
+            <MudGrid>
+                <MudItem xs="12" md="8">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        @if (Dependency.IsInstalled)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                        }
+                        else if (Dependency.IsRequired)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Warning" />
+                        }
+
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.h6">@Dependency.Name</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                @Dependency.Description
+                            </MudText>
+                        </MudStack>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="12" md="4">
+                    <MudStack AlignItems="AlignItems.End" Spacing="1">
+                        <MudChip T="string"
+                                 Color="@GetStatusColor()"
+                                 Size="Size.Small"
+                                 Variant="Variant.Filled">
+                            @Dependency.StatusText
+                        </MudChip>
+
+                        @if (!string.IsNullOrEmpty(Dependency.InstalledVersion))
+                        {
+                            <MudText Typo="Typo.caption">v@Dependency.InstalledVersion</MudText>
+                        }
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+
+            @if (!string.IsNullOrEmpty(Dependency.InstalledPath))
+            {
+                <MudText Typo="Typo.caption" Class="mt-2">
+                    <strong>Location:</strong> @Dependency.InstalledPath
+                </MudText>
+            }
+
+            @if (!string.IsNullOrEmpty(Dependency.DetectionMessage))
+            {
+                <MudText Typo="Typo.caption" Class="mt-1" Color="Color.Secondary">
+                    @Dependency.DetectionMessage
+                </MudText>
+            }
+
+            @if (!Dependency.IsInstalled && !string.IsNullOrEmpty(Dependency.InstallInstructions))
+            {
+                <MudExpansionPanels Class="mt-2">
+                    <MudExpansionPanel Text="Installation Instructions">
+                        <MudText Typo="Typo.body2" Class="mb-2">@Dependency.InstallInstructions</MudText>
+
+                        @if (!string.IsNullOrEmpty(Dependency.DownloadUrl))
+                        {
+                            <MudButton
+                                Variant="Variant.Text"
+                                Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.OpenInNew"
+                                Href="@Dependency.DownloadUrl"
+                                Target="_blank">
+                                Open Download Page
+                            </MudButton>
+                        }
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+
+            @if (Dependency.Alternatives.Any())
+            {
+                <MudText Typo="Typo.caption" Class="mt-2">
+                    <strong>Alternatives:</strong> @string.Join(", ", Dependency.Alternatives)
+                </MudText>
+            }
+        </MudCardContent>
+
+        @if (!Dependency.IsInstalled)
+        {
+            <MudCardActions>
+                @if (Dependency.SupportsAutomatedInstall)
+                {
+                    <MudButton
+                        Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        OnClick="@(() => OnInstallClicked.InvokeAsync())"
+                        StartIcon="@Icons.Material.Filled.Download"
+                        Disabled="@IsInstalling">
+                        Install Automatically
+                    </MudButton>
+                }
+
+                @if (Dependency.SupportsPortableInstall)
+                {
+                    <MudButton
+                        Variant="Variant.Outlined"
+                        Color="Color.Secondary"
+                        OnClick="@(() => OnInstallClicked.InvokeAsync())"
+                        StartIcon="@Icons.Material.Filled.FolderZip"
+                        Disabled="@IsInstalling">
+                        Install Portable
+                    </MudButton>
+                }
+
+                @if (!string.IsNullOrEmpty(Dependency.DownloadUrl))
+                {
+                    <MudButton
+                        Variant="Variant.Text"
+                        Color="Color.Default"
+                        Href="@Dependency.DownloadUrl"
+                        Target="_blank"
+                        StartIcon="@Icons.Material.Filled.OpenInNew">
+                        Download Manually
+                    </MudButton>
+                }
+            </MudCardActions>
+        }
+    </MudCard>
+</MudListItem>
+
+@code {
+    [Parameter]
+    public DependencyInfo Dependency { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnInstallClicked { get; set; }
+
+    [Parameter]
+    public bool IsInstalling { get; set; }
+
+    private Color GetStatusColor()
+    {
+        if (Dependency.IsInstalled)
+            return Color.Success;
+
+        return Dependency.IsRequired ? Color.Error : Color.Warning;
+    }
+}

@@ -1,0 +1,425 @@
+@using CheapShotcutRandomizer.Models
+
+<MudPaper Class="pa-4 mb-2">
+    <MudGrid>
+        <MudItem xs="12">
+            <MudStack Row="true" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@GetStatusIcon()" Color="@GetStatusColor()" />
+                <MudText Typo="Typo.h6">@Path.GetFileName(Job.SourceVideoPath)</MudText>
+                <MudSpacer />
+                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor()">
+                    @Job.Status.ToString()
+                </MudChip>
+            </MudStack>
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudText Typo="Typo.body2">
+                Output: @Job.OutputPath
+            </MudText>
+        </MudItem>
+
+        @* File size information *@
+        @if (Job.Status == RenderJobStatus.Completed && Job.OutputFileSizeBytes.HasValue)
+        {
+            <MudItem xs="12">
+                <MudStack Row="true" Spacing="2">
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Storage" Variant="Variant.Text">
+                        Output: @Job.GetOutputFileSizeFormatted()
+                    </MudChip>
+                </MudStack>
+            </MudItem>
+        }
+
+        @if (Job.Status == RenderJobStatus.Running)
+        {
+            <MudItem xs="12">
+                @{
+                    var currentProgress = GetSmoothedProgressPercentage();
+                }
+                <MudProgressLinear Value="@currentProgress"
+                                   Color="Color.Primary"
+                                   Size="Size.Large">
+                    <MudText Typo="Typo.body2">
+                        @currentProgress.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%
+                        (@GetProgressTimecode())
+                    </MudText>
+                </MudProgressLinear>
+            </MudItem>
+
+            @if (!string.IsNullOrEmpty(_currentFileSize))
+            {
+                <MudItem xs="12">
+                    <MudStack Row="true" Spacing="2">
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Storage" Variant="Variant.Text" Color="Color.Info">
+                            Current file size: @_currentFileSize
+                        </MudChip>
+                    </MudStack>
+                </MudItem>
+            }
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.caption">
+                    ETA: @GetEstimatedTimeDisplay()
+                </MudText>
+            </MudItem>
+        }
+
+        @if (Job.Status == RenderJobStatus.Pending)
+        {
+            <MudItem xs="12">
+                <MudText Typo="Typo.body2" Color="Color.Info">
+                    Queued - Waiting to start...
+                </MudText>
+            </MudItem>
+        }
+
+        <MudItem xs="12">
+            <MudStack Row="true" Spacing="2">
+                @if (Job.Status == RenderJobStatus.Running)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled"
+                               Color="Color.Warning" OnClick="@(() => OnPause.InvokeAsync(Job.JobId))">
+                        Pause
+                    </MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Filled"
+                               Color="Color.Error" OnClick="@(() => OnCancel.InvokeAsync(Job.JobId))">
+                        Cancel
+                    </MudButton>
+                }
+                else if (Job.Status == RenderJobStatus.Paused)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled"
+                               Color="Color.Success" OnClick="@(() => OnResume.InvokeAsync(Job.JobId))">
+                        Resume
+                    </MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Filled"
+                               Color="Color.Error" OnClick="@(() => OnCancel.InvokeAsync(Job.JobId))">
+                        Cancel
+                    </MudButton>
+                }
+                else if (Job.Status == RenderJobStatus.Failed || Job.Status == RenderJobStatus.DeadLetter)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                               Color="Color.Primary" OnClick="@(() => OnRetry.InvokeAsync(Job.JobId))">
+                        Retry
+                    </MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                               Color="Color.Error" OnClick="@ShowErrorDetails">
+                        View Error
+                    </MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                               Color="Color.Error" OnClick="@(() => OnDelete.InvokeAsync(Job.JobId))"
+                               StartIcon="@Icons.Material.Filled.Delete">
+                        Delete
+                    </MudButton>
+                }
+                else if (Job.Status == RenderJobStatus.Completed)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                               Color="Color.Success" OnClick="@OpenOutputFolder">
+                        Open Folder
+                    </MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                               Color="Color.Error" OnClick="@(() => OnDelete.InvokeAsync(Job.JobId))"
+                               StartIcon="@Icons.Material.Filled.Delete">
+                        Delete
+                    </MudButton>
+                }
+                else if (Job.Status == RenderJobStatus.Pending)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                               Color="Color.Error" OnClick="@(() => OnDelete.InvokeAsync(Job.JobId))"
+                               StartIcon="@Icons.Material.Filled.Delete">
+                        Delete
+                    </MudButton>
+                }
+                else if (Job.Status == RenderJobStatus.Cancelled)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                               Color="Color.Error" OnClick="@(() => OnDelete.InvokeAsync(Job.JobId))"
+                               StartIcon="@Icons.Material.Filled.Delete">
+                        Delete
+                    </MudButton>
+                }
+            </MudStack>
+        </MudItem>
+
+        @if (!string.IsNullOrEmpty(Job.LastError) && _showError)
+        {
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Error" Dense="true" CloseIcon="true" CloseIconClicked="@(() => _showError = false)">
+                    @Job.LastError
+                </MudAlert>
+            </MudItem>
+        }
+    </MudGrid>
+</MudPaper>
+
+@using System.Timers
+@implements IDisposable
+
+@code {
+    [Parameter]
+    public RenderJob Job { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback<Guid> OnPause { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnResume { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnCancel { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnRetry { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnDelete { get; set; }
+
+    private bool _showError = false;
+    private string _currentFileSize = string.Empty;
+    private System.Timers.Timer? _fileSizeTimer;
+    private DateTime _lastFileSizeUpdate = DateTime.MinValue;
+
+    // Monotonic progress tracking - only allow values to increase
+    private double _lastProgressPercentage = 0;
+    private int _lastCurrentFrame = 0;
+    private TimeSpan? _lastEstimatedTimeRemaining = null;
+    private DateTime _lastProgressUpdate = DateTime.MinValue;
+
+    // Get smoothed progress percentage that only increases
+    private double GetSmoothedProgressPercentage()
+    {
+        // Only update if the new value is higher or if it's been reset (job restarted)
+        if (Job.ProgressPercentage > _lastProgressPercentage || Job.Status == RenderJobStatus.Pending)
+        {
+            _lastProgressPercentage = Job.ProgressPercentage;
+        }
+        return _lastProgressPercentage;
+    }
+
+    // Get smoothed current frame that only increases
+    private int GetSmoothedCurrentFrame()
+    {
+        // Only update if the new value is higher or if it's been reset (job restarted)
+        if (Job.CurrentFrame > _lastCurrentFrame || Job.Status == RenderJobStatus.Pending)
+        {
+            _lastCurrentFrame = Job.CurrentFrame;
+        }
+        return _lastCurrentFrame;
+    }
+
+    // Get smoothed ETA that doesn't jump around
+    private TimeSpan? GetSmoothedEstimatedTimeRemaining()
+    {
+        if (!Job.EstimatedTimeRemaining.HasValue)
+            return _lastEstimatedTimeRemaining;
+
+        var now = DateTime.UtcNow;
+
+        // Only update ETA every 5 seconds to reduce jitter
+        if ((now - _lastProgressUpdate).TotalSeconds >= 5 || !_lastEstimatedTimeRemaining.HasValue)
+        {
+            _lastProgressUpdate = now;
+
+            // Apply some smoothing - don't let ETA increase by more than 10% at once
+            if (_lastEstimatedTimeRemaining.HasValue)
+            {
+                var maxIncrease = _lastEstimatedTimeRemaining.Value.Add(
+                    TimeSpan.FromSeconds(_lastEstimatedTimeRemaining.Value.TotalSeconds * 0.1));
+
+                if (Job.EstimatedTimeRemaining.Value > maxIncrease)
+                {
+                    // Limit the increase
+                    _lastEstimatedTimeRemaining = maxIncrease;
+                }
+                else
+                {
+                    _lastEstimatedTimeRemaining = Job.EstimatedTimeRemaining;
+                }
+            }
+            else
+            {
+                _lastEstimatedTimeRemaining = Job.EstimatedTimeRemaining;
+            }
+        }
+
+        return _lastEstimatedTimeRemaining;
+    }
+
+    private string GetProgressTimecode()
+    {
+        var smoothedFrame = GetSmoothedCurrentFrame();
+
+        if (Job.TotalFrames.HasValue && Job.TotalFrames.Value > 0)
+        {
+            var currentTime = Job.FramesToTimecode(smoothedFrame);
+            var totalTime = Job.FramesToTimecode(Job.TotalFrames.Value);
+            return $"{currentTime} / {totalTime}";
+        }
+
+        // Fallback to frame display if total frames not available
+        return $"Frame {smoothedFrame}";
+    }
+
+    private string GetEstimatedTimeDisplay()
+    {
+        var smoothedEta = GetSmoothedEstimatedTimeRemaining();
+
+        if (!smoothedEta.HasValue)
+        {
+            return "Calculating...";
+        }
+
+        var eta = smoothedEta.Value;
+
+        // Format as HH:MM:SS for consistency
+        return eta.ToString(@"hh\:mm\:ss");
+    }
+
+    private string GetStatusIcon() => Job.Status switch
+    {
+        RenderJobStatus.Pending => Icons.Material.Filled.HourglassEmpty,
+        RenderJobStatus.Running => Icons.Material.Filled.PlayArrow,
+        RenderJobStatus.Paused => Icons.Material.Filled.Pause,
+        RenderJobStatus.Completed => Icons.Material.Filled.CheckCircle,
+        RenderJobStatus.Failed => Icons.Material.Filled.Error,
+        RenderJobStatus.Cancelled => Icons.Material.Filled.Cancel,
+        RenderJobStatus.DeadLetter => Icons.Material.Filled.Delete,
+        _ => Icons.Material.Filled.Help
+    };
+
+    private Color GetStatusColor() => Job.Status switch
+    {
+        RenderJobStatus.Running => Color.Primary,
+        RenderJobStatus.Completed => Color.Success,
+        RenderJobStatus.Failed => Color.Error,
+        RenderJobStatus.Cancelled => Color.Warning,
+        RenderJobStatus.DeadLetter => Color.Error,
+        _ => Color.Default
+    };
+
+    private void ShowErrorDetails()
+    {
+        _showError = !_showError;
+    }
+
+    private void OpenOutputFolder()
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(Job.OutputPath);
+            if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = directory,
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch
+        {
+            // Silently fail if can't open folder
+        }
+    }
+
+
+    protected override void OnParametersSet()
+    {
+        // Reset smoothed values when job status changes to Pending or Running from a terminal state
+        if (Job.Status == RenderJobStatus.Pending ||
+            (Job.Status == RenderJobStatus.Running &&
+             (_lastProgressPercentage > Job.ProgressPercentage || _lastCurrentFrame > Job.CurrentFrame)))
+        {
+            _lastProgressPercentage = 0;
+            _lastCurrentFrame = 0;
+            _lastEstimatedTimeRemaining = null;
+            _lastProgressUpdate = DateTime.MinValue;
+        }
+
+        // Start file size monitoring when job starts running
+        if (Job.Status == RenderJobStatus.Running && _fileSizeTimer == null)
+        {
+            StartFileSizeMonitoring();
+        }
+        // Stop monitoring when job is no longer running
+        else if (Job.Status != RenderJobStatus.Running && _fileSizeTimer != null)
+        {
+            StopFileSizeMonitoring();
+        }
+
+        base.OnParametersSet();
+    }
+
+    private void StartFileSizeMonitoring()
+    {
+        _fileSizeTimer = new System.Timers.Timer(2000); // Check every 2 seconds (debounced)
+        _fileSizeTimer.Elapsed += OnFileSizeTimerElapsed;
+        _fileSizeTimer.AutoReset = true;
+        _fileSizeTimer.Start();
+    }
+
+    private void StopFileSizeMonitoring()
+    {
+        if (_fileSizeTimer != null)
+        {
+            _fileSizeTimer.Stop();
+            _fileSizeTimer.Dispose();
+            _fileSizeTimer = null;
+        }
+        _currentFileSize = string.Empty;
+    }
+
+    private async void OnFileSizeTimerElapsed(object? sender, ElapsedEventArgs e)
+    {
+        // Debounce: only update once every 2 seconds
+        var now = DateTime.UtcNow;
+        if ((now - _lastFileSizeUpdate).TotalSeconds < 2)
+            return;
+
+        _lastFileSizeUpdate = now;
+
+        await InvokeAsync(() =>
+        {
+            try
+            {
+                // Check output file size
+                var outputPath = Job.OutputPath;
+
+                if (File.Exists(outputPath))
+                {
+                    var fileInfo = new FileInfo(outputPath);
+                    _currentFileSize = FormatBytes(fileInfo.Length);
+                    StateHasChanged();
+                }
+            }
+            catch
+            {
+                // Silently fail if we can't read the file
+            }
+        });
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        double len = bytes;
+        int order = 0;
+
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len /= 1024;
+        }
+
+        return $"{len:F2} {sizes[order]}";
+    }
+
+    public void Dispose()
+    {
+        StopFileSizeMonitoring();
+    }
+}

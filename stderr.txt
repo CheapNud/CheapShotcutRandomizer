@@ -1,0 +1,3 @@
+Plugin C:\Program Files\VapourSynth\plugins\BestSource.dll already loaded (com.vapoursynth.bestsource) from C:/Users/Brech/AppData/Roaming/VapourSynth/plugins64/BestSource.dll
+vsov: failed to preload C:\Users\Brech\AppData\Roaming\VapourSynth\plugins64\vsov\tbb12.dll
+vsov: failed to preload C:\Users\Brech\AppData\Roaming\VapourSynth\plugins64\vsov\openvino.dll

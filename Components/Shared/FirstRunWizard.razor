@@ -1,0 +1,276 @@
+@using MudBlazor
+@using CheapShotcutRandomizer.Models
+@using CheapShotcutRandomizer.Services
+@inject DependencyChecker DependencyChecker
+@inject DependencyInstaller DependencyInstaller
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudContainer Style="max-height: 600px; overflow-y: auto;">
+            @if (_currentStep == WizardStep.Welcome)
+            {
+                <MudText Typo="Typo.h5" GutterBottom="true">Welcome to ShotcutRandomizer!</MudText>
+                <MudText Typo="Typo.body1" Class="mb-4">
+                    This wizard will help you set up the required dependencies for rendering Shotcut/MLT projects.
+                </MudText>
+                <MudText Typo="Typo.body1" Class="mb-2">
+                    We'll check for:
+                </MudText>
+                <MudList T="string" Dense="true">
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.Check">FFmpeg - Video encoding/decoding</MudListItem>
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.Check">FFprobe - Video analysis</MudListItem>
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.Check">Shotcut Melt - Project rendering</MudListItem>
+                </MudList>
+            }
+            else if (_currentStep == WizardStep.Checking)
+            {
+                <MudText Typo="Typo.h5" GutterBottom="true">Checking Dependencies</MudText>
+                <MudText Typo="Typo.body1" Class="mb-4">
+                    Please wait while we scan your system for installed dependencies...
+                </MudText>
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+            }
+            else if (_currentStep == WizardStep.Results)
+            {
+                <MudText Typo="Typo.h5" GutterBottom="true">Dependency Check Results</MudText>
+
+                @if (_dependencyStatus != null)
+                {
+                    <MudAlert Severity="@GetResultSeverity()" Class="mb-4">
+                        @_dependencyStatus.SummaryMessage
+                    </MudAlert>
+
+                    <MudText Typo="Typo.h6" Class="mb-2">Required Dependencies</MudText>
+                    <MudList T="string" Dense="true">
+                        @foreach (var dep in _dependencyStatus.Required)
+                        {
+                            <MudListItem T="string" Icon="@GetDependencyIcon(dep)">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudText>@dep.Name</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetStatusChipColor(dep)">
+                                        @(dep.IsInstalled ? "Installed" : "Missing")
+                                    </MudChip>
+                                </MudStack>
+                            </MudListItem>
+                        }
+                    </MudList>
+
+                    @if (_dependencyStatus.Optional.Any())
+                    {
+                        <MudText Typo="Typo.h6" Class="mt-4 mb-2">Optional Dependencies</MudText>
+                        <MudList T="string" Dense="true">
+                            @foreach (var dep in _dependencyStatus.Optional)
+                            {
+                                <MudListItem T="string" Icon="@GetDependencyIcon(dep)">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudText>@dep.Name</MudText>
+                                        <MudChip T="string" Size="Size.Small" Color="@GetStatusChipColor(dep)">
+                                            @(dep.IsInstalled ? "Installed" : "Not Installed")
+                                        </MudChip>
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    }
+                }
+            }
+            else if (_currentStep == WizardStep.Installing)
+            {
+                <MudText Typo="Typo.h5" GutterBottom="true">Installing Dependencies</MudText>
+                <MudText Typo="Typo.body1" Class="mb-4">
+                    @_installMessage
+                </MudText>
+
+                @if (_installProgress != null)
+                {
+                    <MudProgressLinear
+                        Value="@_installProgress.ProgressPercentage"
+                        Color="Color.Primary"
+                        Class="mb-2" />
+                    <MudText Typo="Typo.caption">@_installProgress.ProgressPercentage%</MudText>
+                }
+            }
+            else if (_currentStep == WizardStep.Complete)
+            {
+                <MudText Typo="Typo.h5" GutterBottom="true">Setup Complete!</MudText>
+
+                @if (_dependencyStatus?.AllRequiredInstalled == true)
+                {
+                    <MudAlert Severity="Severity.Success" Class="mb-4">
+                        All required dependencies are installed. You're ready to start using ShotcutRandomizer!
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Warning" Class="mb-4">
+                        Some required dependencies are still missing. Please install them manually to use all features.
+                    </MudAlert>
+                }
+
+                <MudText Typo="Typo.body1" Class="mb-2">
+                    You can always check and manage dependencies from the Dependency Manager page in Settings.
+                </MudText>
+            }
+        </MudContainer>
+    </DialogContent>
+    <DialogActions>
+        @if (_currentStep == WizardStep.Welcome)
+        {
+            <MudButton OnClick="@Cancel" Variant="Variant.Text">Skip</MudButton>
+            <MudButton OnClick="@StartCheckingAsync" Variant="Variant.Filled" Color="Color.Primary">
+                Check Dependencies
+            </MudButton>
+        }
+        else if (_currentStep == WizardStep.Results)
+        {
+            <MudButton OnClick="@Cancel" Variant="Variant.Text">Close</MudButton>
+            @if (_dependencyStatus?.MissingRequired.Any() == true)
+            {
+                <MudButton OnClick="@StartInstallingAsync" Variant="Variant.Filled" Color="Color.Primary">
+                    Install Missing
+                </MudButton>
+            }
+            else
+            {
+                <MudButton OnClick="@CompleteWizard" Variant="Variant.Filled" Color="Color.Success">
+                    Finish
+                </MudButton>
+            }
+        }
+        else if (_currentStep == WizardStep.Complete)
+        {
+            <MudButton OnClick="@CompleteWizard" Variant="Variant.Filled" Color="Color.Success">
+                Get Started
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private enum WizardStep
+    {
+        Welcome,
+        Checking,
+        Results,
+        Installing,
+        Complete
+    }
+
+    private WizardStep _currentStep = WizardStep.Welcome;
+    private DependencyStatus? _dependencyStatus;
+    private InstallationResult? _installProgress;
+    private string _installMessage = string.Empty;
+
+    private async Task StartCheckingAsync()
+    {
+        _currentStep = WizardStep.Checking;
+        StateHasChanged();
+
+        await Task.Delay(500); // Brief delay for UX
+
+        try
+        {
+            _dependencyStatus = await DependencyChecker.CheckAllDependenciesAsync();
+            _currentStep = WizardStep.Results;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to check dependencies: {ex.Message}", Severity.Error);
+            _currentStep = WizardStep.Results;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task StartInstallingAsync()
+    {
+        if (_dependencyStatus?.MissingRequired.Any() != true)
+            return;
+
+        _currentStep = WizardStep.Installing;
+        StateHasChanged();
+
+        DependencyInstaller.ProgressChanged += OnInstallProgressChanged;
+
+        try
+        {
+            foreach (var dependency in _dependencyStatus.MissingRequired)
+            {
+                _installMessage = $"Installing {dependency.Name}...";
+                StateHasChanged();
+
+                var installResult = await DependencyInstaller.InstallDependencyAsync(
+                    dependency.Type,
+                    preferredStrategy: null,
+                    cancellationToken: CancellationToken.None
+                );
+
+                if (!installResult.Success && installResult.Strategy != InstallationStrategy.Manual)
+                {
+                    Snackbar.Add($"Failed to install {dependency.Name}: {installResult.Message}", Severity.Warning);
+                }
+            }
+
+            _dependencyStatus = await DependencyChecker.CheckAllDependenciesAsync();
+            _currentStep = WizardStep.Complete;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Installation error: {ex.Message}", Severity.Error);
+            _currentStep = WizardStep.Complete;
+        }
+        finally
+        {
+            DependencyInstaller.ProgressChanged -= OnInstallProgressChanged;
+            StateHasChanged();
+        }
+    }
+
+    private void OnInstallProgressChanged(int percentage, string message)
+    {
+        if (_installProgress == null)
+        {
+            _installProgress = new InstallationResult();
+        }
+
+        _installProgress.ProgressPercentage = percentage;
+        _installProgress.Message = message;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void CompleteWizard()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private Severity GetResultSeverity()
+    {
+        if (_dependencyStatus == null)
+            return Severity.Info;
+
+        return _dependencyStatus.AllRequiredInstalled ? Severity.Success : Severity.Warning;
+    }
+
+    private string GetDependencyIcon(DependencyInfo dep)
+    {
+        return dep.IsInstalled
+            ? Icons.Material.Filled.CheckCircle
+            : dep.IsRequired
+                ? Icons.Material.Filled.Error
+                : Icons.Material.Filled.WarningAmber;
+    }
+
+    private Color GetStatusChipColor(DependencyInfo dep)
+    {
+        return dep.IsInstalled ? Color.Success : dep.IsRequired ? Color.Error : Color.Warning;
+    }
+}

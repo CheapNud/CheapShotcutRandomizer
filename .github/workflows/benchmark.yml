@@ -1,0 +1,77 @@
+name: Performance Benchmarks
+
+on:
+  push:
+    branches: [ master, dev ]
+  pull_request:
+    branches: [ master, dev ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '10.0.x'
+
+jobs:
+  benchmark:
+    name: Run Benchmarks
+    runs-on: windows-latest
+    # Only run benchmarks on specific PRs or manual trigger
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'performance')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        path: repo
+
+    - name: Checkout CheapHelpers dependency
+      uses: actions/checkout@v4
+      with:
+        repository: CheapNud/CheapHelpers
+        path: CheapHelpers
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-quality: 'preview'
+
+    - name: Restore dependencies
+      working-directory: repo
+      run: dotnet restore CheapShotcutRandomizer.sln
+
+    - name: Build Release
+      working-directory: repo
+      run: dotnet build CheapShotcutRandomizer.sln --configuration Release --no-restore
+
+    - name: Check for benchmark project
+      id: check
+      shell: pwsh
+      run: |
+        $exists = Test-Path "repo/CheapShotcutRandomizer.Benchmarks/CheapShotcutRandomizer.Benchmarks.csproj"
+        echo "EXISTS=$exists" >> $env:GITHUB_OUTPUT
+
+    - name: Run BenchmarkDotNet
+      if: steps.check.outputs.EXISTS == 'True'
+      working-directory: repo
+      run: dotnet run --project CheapShotcutRandomizer.Benchmarks/CheapShotcutRandomizer.Benchmarks.csproj --configuration Release
+
+    - name: Upload benchmark results
+      if: steps.check.outputs.EXISTS == 'True'
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: repo/BenchmarkDotNet.Artifacts/results/
+        retention-days: 30
+
+    - name: Comment benchmark summary on PR
+      if: github.event_name == 'pull_request' && steps.check.outputs.EXISTS == 'True'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        recreate: true
+        header: benchmarks
+        message: |
+          ## Performance Benchmark Results
+
+          Benchmark results are available in the artifacts.
+          Please review for any significant performance regressions.

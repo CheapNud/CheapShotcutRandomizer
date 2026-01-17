@@ -1,0 +1,96 @@
+name: Code Coverage Report
+
+on:
+  push:
+    branches: [ master, dev ]
+  pull_request:
+    branches: [ master, dev ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '10.0.x'
+
+jobs:
+  coverage:
+    name: Generate Coverage Report
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        path: repo
+        fetch-depth: 0
+
+    - name: Checkout CheapHelpers dependency
+      uses: actions/checkout@v4
+      with:
+        repository: CheapNud/CheapHelpers
+        path: CheapHelpers
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-quality: 'preview'
+
+    - name: Restore dependencies
+      working-directory: repo
+      run: dotnet restore CheapShotcutRandomizer.sln
+
+    - name: Build solution
+      working-directory: repo
+      run: dotnet build CheapShotcutRandomizer.sln --configuration Debug --no-restore
+
+    - name: Run tests with coverage
+      working-directory: repo
+      run: |
+        dotnet test CheapShotcutRandomizer.Tests/CheapShotcutRandomizer.Tests.csproj `
+          --configuration Debug `
+          --no-build `
+          --verbosity normal `
+          --collect:"XPlat Code Coverage" `
+          --results-directory ./TestResults `
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+    - name: Install ReportGenerator
+      run: dotnet tool install -g dotnet-reportgenerator-globaltool
+
+    - name: Generate coverage report
+      run: |
+        reportgenerator `
+          "-reports:repo/TestResults/**/coverage.opencover.xml" `
+          "-targetdir:repo/coveragereport" `
+          "-reporttypes:Html;Cobertura;MarkdownSummary" `
+          "-title:Cheap Shotcut Randomizer Coverage"
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: repo/coveragereport/
+        retention-days: 30
+
+    - name: Display coverage summary
+      shell: pwsh
+      run: |
+        if (Test-Path "repo/coveragereport/Summary.md") {
+          Get-Content "repo/coveragereport/Summary.md"
+        }
+
+    - name: Comment coverage on PR
+      if: github.event_name == 'pull_request'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        recreate: true
+        path: repo/coveragereport/Summary.md
+
+    - name: Upload to Codecov (optional)
+      if: false  # Enable if you set up Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: repo/TestResults/**/coverage.opencover.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false

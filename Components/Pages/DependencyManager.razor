@@ -1,0 +1,259 @@
+@page "/dependencies"
+@using CheapShotcutRandomizer.Models
+@using CheapShotcutRandomizer.Services
+@inject DependencyChecker DependencyChecker
+@inject DependencyInstaller DependencyInstaller
+@inject ISnackbar Snackbar
+
+<PageTitle>Dependency Manager</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Dependency Manager</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">
+        Manage external dependencies required for video processing and frame interpolation.
+    </MudText>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+        <MudText Typo="Typo.body2" Align="Align.Center">Checking dependencies...</MudText>
+    }
+    else if (_dependencyStatus != null)
+    {
+        <MudCard Class="mb-4">
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="12" md="8">
+                        <MudText Typo="Typo.h6" GutterBottom="true">Overall Status</MudText>
+                        <MudText Typo="Typo.body1">@_dependencyStatus.SummaryMessage</MudText>
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudProgressCircular
+                            Value="@_dependencyStatus.HealthPercentage"
+                            Color="@GetHealthColor()"
+                            Size="Size.Large"
+                            Class="mb-2">
+                            <MudText Typo="Typo.h6">@_dependencyStatus.HealthPercentage%</MudText>
+                        </MudProgressCircular>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton
+                    Variant="Variant.Filled"
+                    Color="Color.Primary"
+                    OnClick="@(() => RefreshDependenciesAsync())"
+                    StartIcon="@Icons.Material.Filled.Refresh">
+                    Refresh Status
+                </MudButton>
+                @if (!_dependencyStatus.AllRequiredInstalled)
+                {
+                    <MudButton
+                        Variant="Variant.Filled"
+                        Color="Color.Success"
+                        OnClick="@(() => InstallAllMissingAsync())"
+                        StartIcon="@Icons.Material.Filled.Download"
+                        Disabled="@_isInstalling">
+                        Install Missing
+                    </MudButton>
+                }
+            </MudCardActions>
+        </MudCard>
+
+        @if (_isInstalling && _installProgress != null)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4">
+                <MudText Typo="Typo.body1" GutterBottom="true">@_installProgress.Message</MudText>
+                <MudProgressLinear
+                    Value="@_installProgress.ProgressPercentage"
+                    Color="Color.Primary"
+                    Class="mt-2" />
+            </MudAlert>
+        }
+
+        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4">
+            <MudTabPanel Text="Required" Icon="@Icons.Material.Filled.Warning">
+                <MudList T="string">
+                    @foreach (var dep in _dependencyStatus.Required)
+                    {
+                        <DependencyListItem
+                            Dependency="@dep"
+                            OnInstallClicked="@(() => InstallDependencyAsync(dep))"
+                            IsInstalling="@_isInstalling" />
+                    }
+                </MudList>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Optional" Icon="@Icons.Material.Filled.Extension">
+                <MudList T="string">
+                    @foreach (var dep in _dependencyStatus.Optional)
+                    {
+                        <DependencyListItem
+                            Dependency="@dep"
+                            OnInstallClicked="@(() => InstallDependencyAsync(dep))"
+                            IsInstalling="@_isInstalling" />
+                    }
+                </MudList>
+            </MudTabPanel>
+
+            <MudTabPanel Text="All" Icon="@Icons.Material.Filled.List">
+                <MudList T="string">
+                    @foreach (var dep in _dependencyStatus.AllDependencies)
+                    {
+                        <DependencyListItem
+                            Dependency="@dep"
+                            OnInstallClicked="@(() => InstallDependencyAsync(dep))"
+                            IsInstalling="@_isInstalling" />
+                    }
+                </MudList>
+            </MudTabPanel>
+        </MudTabs>
+    }
+</MudContainer>
+
+@code {
+    private DependencyStatus? _dependencyStatus;
+    private bool _isLoading = true;
+    private bool _isInstalling = false;
+    private InstallationResult? _installProgress;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshDependenciesAsync();
+    }
+
+    private async Task RefreshDependenciesAsync()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            _dependencyStatus = await DependencyChecker.CheckAllDependenciesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to check dependencies: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task InstallDependencyAsync(DependencyInfo dependency)
+    {
+        if (_isInstalling)
+        {
+            Snackbar.Add("An installation is already in progress", Severity.Warning);
+            return;
+        }
+
+        _isInstalling = true;
+        StateHasChanged();
+
+        try
+        {
+            DependencyInstaller.ProgressChanged += OnInstallProgressChanged;
+
+            var installResult = await DependencyInstaller.InstallDependencyAsync(
+                dependency.Type,
+                preferredStrategy: null,
+                cancellationToken: CancellationToken.None
+            );
+
+            _installProgress = installResult;
+            StateHasChanged();
+
+            if (installResult.Success)
+            {
+                Snackbar.Add(installResult.Message, Severity.Success);
+
+                if (installResult.RequiresRestart)
+                {
+                    Snackbar.Add("Please restart the application for changes to take effect", Severity.Info);
+                }
+
+                await RefreshDependenciesAsync();
+            }
+            else
+            {
+                if (installResult.Strategy == InstallationStrategy.Manual)
+                {
+                    Snackbar.Add("Manual installation required - see instructions below", Severity.Info);
+                }
+                else
+                {
+                    Snackbar.Add($"Installation failed: {installResult.Message}", Severity.Error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Installation error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            DependencyInstaller.ProgressChanged -= OnInstallProgressChanged;
+            _isInstalling = false;
+            _installProgress = null;
+            StateHasChanged();
+        }
+    }
+
+    private async Task InstallAllMissingAsync()
+    {
+        if (_dependencyStatus == null || _isInstalling)
+            return;
+
+        var missingRequired = _dependencyStatus.MissingRequired;
+        if (missingRequired.Count == 0)
+        {
+            Snackbar.Add("All required dependencies are already installed", Severity.Info);
+            return;
+        }
+
+        Snackbar.Add($"Installing {missingRequired.Count} missing dependencies...", Severity.Info);
+
+        foreach (var dependency in missingRequired)
+        {
+            await InstallDependencyAsync(dependency);
+
+            if (_isInstalling)
+            {
+                break;
+            }
+        }
+    }
+
+    private void OnInstallProgressChanged(int percentage, string message)
+    {
+        if (_installProgress != null)
+        {
+            _installProgress.ProgressPercentage = percentage;
+            _installProgress.Message = message;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Color GetHealthColor()
+    {
+        if (_dependencyStatus == null)
+            return Color.Default;
+
+        return _dependencyStatus.HealthPercentage switch
+        {
+            >= 90 => Color.Success,
+            >= 70 => Color.Warning,
+            >= 50 => Color.Warning,
+            _ => Color.Error
+        };
+    }
+}
+
+<style>
+    .dependency-card {
+        margin-bottom: 16px;
+    }
+</style>

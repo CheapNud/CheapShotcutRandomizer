@@ -1,0 +1,753 @@
+@page "/"
+@using CheapAvaloniaBlazor.Services
+@using CheapShotcutRandomizer.Components.Shared
+@using CheapShotcutRandomizer.Services.Queue
+@inject ShotcutService ShotcutSvc
+@inject FileSearchService FileSearchSvc
+@inject ProjectStateService ProjectState
+@inject IDesktopInteropService Desktop
+@inject ISnackbar Snackbar
+@inject IRenderQueueService QueueService
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+<PageTitle>Shotcut Randomizer</PageTitle>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h4">Shotcut Project Randomizer</MudText>
+
+        @if (ProjectState.CurrentProject == null)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@LoadProjectAsync" StartIcon="@Icons.Material.Filled.FolderOpen">
+                Load Shotcut Project
+            </MudButton>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Success">
+                Project loaded: <strong>@ProjectState.CurrentProjectPath</strong>
+            </MudAlert>
+
+            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="@LoadProjectAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                Load Different Project
+            </MudButton>
+        }
+    </MudStack>
+</MudPaper>
+
+@if (ProjectState.CurrentProject != null)
+{
+    <MudPaper Class="pa-4 mb-4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <MudText Typo="Typo.h5">Available Playlists</MudText>
+            <MudSpacer />
+            <MudCheckBox @bind-Value="_avoidConsecutiveSameSource"
+                         Label="Avoid consecutive clips from same source"
+                         Color="Color.Primary"
+                         Dense="true" />
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" OnClick="@SelectAllPlaylists">
+                Select All
+            </MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary" OnClick="@ClearAllPlaylists">
+                Clear All
+            </MudButton>
+        </MudStack>
+        @if (_selectedPlaylists.Count > 0)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">
+                @_selectedPlaylists.Count playlist@(_selectedPlaylists.Count == 1 ? "" : "s") selected
+            </MudAlert>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mb-2">Select playlists to include in random compilation:</MudText>
+        }
+        <MudList T="string" Dense="true">
+            @for (int i = ProjectState.CurrentProject.Playlist.Count - 1; i > 0; i--)
+            {
+                var playlist = ProjectState.CurrentProject.Playlist[i];
+                var index = i;
+                <MudListItem T="string">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudCheckBox T="bool" Value="@_selectedPlaylists.Contains(index)"
+                                     ValueChanged="@(selected => TogglePlaylistSelection(index, selected))"
+                                     Color="Color.Primary" />
+                        <MudText><strong>[@index]</strong> @playlist.Name (@playlist.Entry.Count clips)</MudText>
+                        <MudSpacer />
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                   OnClick="@(() => ShufflePlaylistAsync(index))">
+                            Shuffle
+                        </MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                                   OnClick="@(() => ShuffleAndAddToQueueAsync(index))"
+                                   StartIcon="@Icons.Material.Filled.AddToQueue">
+                            Add to Queue
+                        </MudButton>
+                    </MudStack>
+                </MudListItem>
+            }
+        </MudList>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h5" Class="mb-3">Generate Random Compilation</MudText>
+
+        <MudStack Spacing="3">
+            <MudStack Spacing="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudText Typo="Typo.body2">
+                        <strong>Duration Weight:</strong> @_durationWeight.ToString("0.00")
+                    </MudText>
+                    <MudTooltip Text="Controls preference for shorter vs longer videos. Higher values strongly favor shorter clips. Use 0 for no bias, 4 for balanced mix, or 10+ to heavily prioritize short videos.">
+                        <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Primary" />
+                    </MudTooltip>
+                </MudStack>
+                <MudSlider @bind-Value="_durationWeight"
+                           Min="0" Max="20" Step="0.05"
+                           Color="Color.Primary"
+                           Variant="Variant.Filled">
+                    @_durationWeight.ToString("0.00")
+                </MudSlider>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Affects video length selection: 0 = no preference • 0.5 = minimal bias • 4 = balanced (recommended) • 10+ = only short clips
+                </MudText>
+            </MudStack>
+
+            <MudStack Spacing="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudText Typo="Typo.body2">
+                        <strong>Number of Videos Weight:</strong> @_numberOfVideosWeight.ToString("0.00")
+                    </MudText>
+                    <MudTooltip Text="Controls preference for including more clips in the final playlist. Higher values will try to maximize the number of videos included. Use 0 for duration-focused selection, or 0.8 for variety.">
+                        <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Primary" />
+                    </MudTooltip>
+                </MudStack>
+                <MudSlider @bind-Value="_numberOfVideosWeight"
+                           Min="0" Max="5" Step="0.01"
+                           Color="Color.Primary"
+                           Variant="Variant.Filled">
+                    @_numberOfVideosWeight.ToString("0.00")
+                </MudSlider>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Affects clip count: 0 = duration-focused • 0.5 = balanced • 0.8 = more variety (recommended) • 1+ = maximum clips
+                </MudText>
+            </MudStack>
+
+            @if (_selectedPlaylists.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle1" Class="mt-2">Target Duration for Each Playlist:</MudText>
+                @foreach (var playlistIndex in _selectedPlaylists)
+                {
+                    if (playlistIndex > 0 && playlistIndex < ProjectState.CurrentProject.Playlist.Count)
+                    {
+                        var playlist = ProjectState.CurrentProject.Playlist[playlistIndex];
+                        var totalSeconds = playlist.Entry.Sum(x => x.Duration);
+                        var totalTime = TimeSpan.FromSeconds(totalSeconds);
+                        var currentSeconds = GetTargetSeconds(playlistIndex);
+                        var displayDuration = currentSeconds == 0
+                            ? $"All clips ({totalTime:hh\\:mm\\:ss})"
+                            : TimeSpan.FromSeconds(currentSeconds).ToString(@"hh\:mm\:ss");
+
+                        <MudStack Spacing="1">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText Typo="Typo.body2">
+                                    <strong>@playlist.Name:</strong>
+                                </MudText>
+                                <MudTextField T="string"
+                                              Value="@FormatDurationInput(currentSeconds)"
+                                              ValueChanged="@(value => ParseAndSetDuration(playlistIndex, value, totalSeconds))"
+                                              Label="Duration (mm:ss or seconds)"
+                                              Variant="Variant.Outlined"
+                                              Style="max-width: 200px;"
+                                              Placeholder="00:00 or 600"
+                                              HelperText="@($"Max: {totalTime:mm\\:ss} or {totalSeconds}s")" />
+                                <MudChip T="string" Size="Size.Small">@displayDuration</MudChip>
+                            </MudStack>
+                            <MudSlider T="int"
+                                       Value="@currentSeconds"
+                                       ValueChanged="@(seconds => SetTargetSeconds(playlistIndex, seconds))"
+                                       Min="0"
+                                       Max="@totalSeconds"
+                                       Step="10"
+                                       Color="Color.Primary"
+                                       Variant="Variant.Filled">
+                                @if (currentSeconds == 0)
+                                {
+                                    <text>All (@totalTime.ToString(@"hh\:mm\:ss"))</text>
+                                }
+                                else
+                                {
+                                    @TimeSpan.FromSeconds(currentSeconds).ToString(@"hh\:mm\:ss")
+                                }
+                            </MudSlider>
+                        </MudStack>
+                    }
+                }
+            }
+
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Filled" Color="Color.Success"
+                         OnClick="@GenerateRandomPlaylistAsync" Disabled="@(_selectedPlaylists.Count == 0)">
+                    Generate Random Playlist
+                </MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                         OnClick="@GenerateRandomAndAddToQueueAsync"
+                         Disabled="@(_selectedPlaylists.Count == 0)"
+                         StartIcon="@Icons.Material.Filled.AddToQueue">
+                    Generate & Add to Queue
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h5" Class="mb-3">Find File in Tracks</MudText>
+
+        <MudStack Spacing="2">
+            <MudTextField @bind-Value="_searchQuery"
+                         Label="Search by filename (partial match)"
+                         Placeholder="Enter part of filename..."
+                         Immediate="true"
+                         DebounceInterval="500"
+                         OnDebounceIntervalElapsed="@SearchFiles"
+                         Adornment="Adornment.End"
+                         AdornmentIcon="@Icons.Material.Filled.Clear"
+                         OnAdornmentClick="@ClearSearch"
+                         @onkeydown="@OnSearchKeyDown" />
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                @if (_allFiles.Count > 0)
+                {
+                    <MudCheckBox @bind-Value="_showOnlyDuplicates"
+                                 Label="Show only duplicates"
+                                 Color="Color.Primary"
+                                 Dense="true" />
+                }
+            </MudStack>
+
+            @if (_searchResults.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-2">Found @_searchResults.Count occurrence(s):</MudText>
+                <MudTable T="FileSearchResult" Items="@_searchResults" Dense="true" Hover="true">
+                    <HeaderContent>
+                        <MudTh>Filename</MudTh>
+                        <MudTh>Playlist</MudTh>
+                        <MudTh>Position</MudTh>
+                        <MudTh>Timeline</MudTh>
+                        <MudTh>In/Out</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Filename">@context.DisplayName</MudTd>
+                        <MudTd DataLabel="Playlist">[@context.PlaylistIndex] @context.PlaylistName</MudTd>
+                        <MudTd DataLabel="Position">@context.EntryIndex</MudTd>
+                        <MudTd DataLabel="Timeline">@context.TimelineDisplay</MudTd>
+                        <MudTd DataLabel="In/Out">@context.EntryInPoint → @context.EntryOutPoint</MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager PageSizeOptions="[10, 25, 50, 100]" />
+                    </PagerContent>
+                </MudTable>
+            }
+            else if (_searchPerformed)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">No files found matching "@_searchQuery"</MudAlert>
+            }
+
+            @if (_allFiles.Count > 0)
+            {
+                var filesToDisplay = GetFilteredFiles();
+                var displayCount = filesToDisplay.Count();
+                var totalCount = _allFiles.Count;
+                var duplicateCount = _allFiles.Count(f => f.UsageCount > 1);
+
+                <MudText Typo="Typo.subtitle2" Class="mt-2">
+                    @if (_showOnlyDuplicates)
+                    {
+                        <text>Showing @duplicateCount duplicates of @totalCount total files</text>
+                    }
+                    else
+                    {
+                        <text>Showing @totalCount files (@duplicateCount duplicates)</text>
+                    }
+                </MudText>
+
+                @if (displayCount == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">No duplicate files found</MudAlert>
+                }
+                else
+                {
+                    <MudTable T="UniqueFileInfo" Items="@filesToDisplay" Dense="true" Hover="true">
+                        <HeaderContent>
+                            <MudTh>Filename</MudTh>
+                            <MudTh>Usage Count</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Filename">@context.FileName</MudTd>
+                            <MudTd DataLabel="Usage Count">
+                                <MudChip T="string" Size="Size.Small" Color="@(context.UsageCount > 1 ? Color.Warning : Color.Info)">
+                                    @context.UsageCount
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudTooltip Text="Search by this file">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Search"
+                                                  Size="Size.Small"
+                                                  OnClick="@(() => SearchByProducerId(context.ProducerId))" />
+                                </MudTooltip>
+                            </MudTd>
+                        </RowTemplate>
+                        <PagerContent>
+                            <MudTablePager PageSizeOptions="[10, 25, 50, 100]" />
+                        </PagerContent>
+                    </MudTable>
+                }
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+<AddRenderJobDialog @bind-IsVisible="_showAddRenderDialog"
+                    PrePopulatedSourcePath="@_dialogSourcePath"
+                    ShowTrackSelection="@_showTrackSelection"
+                    ShowRenderRange="@_showRenderRange"
+                    PreSelectedVideoTracks="@_preSelectedVideoTracks"
+                    PreSelectedAudioTracks="@_preSelectedAudioTracks"
+                    OnJobAdded="@HandleJobAdded" />
+
+@code {
+    private double _durationWeight = 4.0;
+    private double _numberOfVideosWeight = 0.8;
+    private bool _avoidConsecutiveSameSource = true;
+    private HashSet<int> _selectedPlaylists = [];
+    private Dictionary<int, int> _targetSeconds = new();
+
+    // Dialog state
+    private bool _showAddRenderDialog = false;
+    private string _dialogSourcePath = string.Empty;
+    private bool _showTrackSelection = false;
+    private bool _showRenderRange = true;
+    private string? _preSelectedVideoTracks = null;
+    private string? _preSelectedAudioTracks = null;
+
+    // File search
+    private string _searchQuery = string.Empty;
+    private List<FileSearchResult> _searchResults = [];
+    private List<UniqueFileInfo> _allFiles = [];
+    private bool _searchPerformed = false;
+    private bool _showOnlyDuplicates = false;
+
+    private void TogglePlaylistSelection(int playlistIndex, bool selected)
+    {
+        if (selected)
+        {
+            _selectedPlaylists.Add(playlistIndex);
+        }
+        else
+        {
+            _selectedPlaylists.Remove(playlistIndex);
+            _targetSeconds.Remove(playlistIndex);
+        }
+    }
+
+    private void SelectAllPlaylists()
+    {
+        if (ProjectState.CurrentProject == null) return;
+
+        _selectedPlaylists.Clear();
+        for (int i = 1; i < ProjectState.CurrentProject.Playlist.Count; i++)
+        {
+            _selectedPlaylists.Add(i);
+        }
+    }
+
+    private void ClearAllPlaylists()
+    {
+        _selectedPlaylists.Clear();
+        _targetSeconds.Clear();
+    }
+
+    private int GetTargetSeconds(int playlistIndex)
+        => _targetSeconds.GetValueOrDefault(playlistIndex, 0);
+
+    private void SetTargetSeconds(int playlistIndex, int seconds)
+    {
+        _targetSeconds[playlistIndex] = seconds;
+    }
+
+    private string FormatDurationInput(int seconds)
+    {
+        if (seconds == 0)
+            return "0";
+
+        var minutes = seconds / 60;
+        var secs = seconds % 60;
+        return $"{minutes:00}:{secs:00}";
+    }
+
+    private void ParseAndSetDuration(int playlistIndex, string input, int maxSeconds)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            SetTargetSeconds(playlistIndex, 0);
+            return;
+        }
+
+        int parsedSeconds = 0;
+
+        // Try parsing as mm:ss format
+        if (input.Contains(':'))
+        {
+            var parts = input.Split(':');
+            if (parts.Length == 2 &&
+                int.TryParse(parts[0], out int minutes) &&
+                int.TryParse(parts[1], out int seconds))
+            {
+                parsedSeconds = (minutes * 60) + seconds;
+            }
+        }
+        // Try parsing as plain seconds
+        else if (int.TryParse(input, out int seconds))
+        {
+            parsedSeconds = seconds;
+        }
+
+        // Clamp to valid range
+        parsedSeconds = Math.Max(0, Math.Min(parsedSeconds, maxSeconds));
+
+        SetTargetSeconds(playlistIndex, parsedSeconds);
+    }
+
+    private async Task LoadProjectAsync()
+    {
+        try
+        {
+            var path = await Desktop.OpenFileDialogAsync(new()
+            {
+                Title = "Select Shotcut Project",
+                Filters = [new() { Name = "MLT Project", Extensions = ["mlt"] }]
+            });
+
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            ProjectState.CurrentProjectPath = path;
+            ProjectState.CurrentProject = await ShotcutSvc.LoadProjectAsync(path);
+
+            if (ProjectState.CurrentProject == null)
+            {
+                Snackbar.Add("Failed to load project", Severity.Error);
+                return;
+            }
+
+            // Automatically load all files when project is loaded
+            _allFiles = FileSearchSvc.GetUniqueFiles(ProjectState.CurrentProject);
+
+            Snackbar.Add("Project loaded successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ShufflePlaylistAsync(int playlistIndex)
+    {
+        try
+        {
+            if (ProjectState.CurrentProject == null)
+                return;
+
+            ShotcutSvc.ShufflePlaylist(ProjectState.CurrentProject, playlistIndex, _avoidConsecutiveSameSource);
+
+            var newPath = await ShotcutSvc.SaveProjectAsync(ProjectState.CurrentProject, ProjectState.CurrentProjectPath);
+
+            var constraintMsg = _avoidConsecutiveSameSource ? " (avoiding consecutive same source)" : "";
+            Snackbar.Add($"Shuffled{constraintMsg} and saved to: {Path.GetFileName(newPath)}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error shuffling: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task GenerateRandomPlaylistAsync()
+    {
+        try
+        {
+            if (ProjectState.CurrentProject == null || _selectedPlaylists.Count == 0)
+            {
+                Snackbar.Add("Please select at least one playlist", Severity.Warning);
+                return;
+            }
+
+            var sourcePlaylists = _selectedPlaylists
+                .Select(idx => (idx, _targetSeconds.GetValueOrDefault(idx, 0)))
+                .ToList();
+
+            var (newPlaylist, _) = ShotcutSvc.GenerateRandomPlaylist(
+                ProjectState.CurrentProject,
+                sourcePlaylists,
+                _durationWeight,
+                _numberOfVideosWeight
+            );
+
+            var newPath = await ShotcutSvc.SaveProjectAsync(ProjectState.CurrentProject, ProjectState.CurrentProjectPath);
+
+            Snackbar.Add($"Generated playlist with {newPlaylist.Entry.Count} clips. Saved to: {Path.GetFileName(newPath)}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void OnSearchKeyDown(KeyboardEventArgs keyArgs)
+    {
+        if (keyArgs.Key == "Enter")
+            SearchFiles();
+    }
+
+    private void ClearSearch()
+    {
+        _searchQuery = string.Empty;
+        _searchResults = [];
+        _searchPerformed = false;
+    }
+
+    private void SearchFiles()
+    {
+        if (ProjectState.CurrentProject == null)
+        {
+            Snackbar.Add("Please load a project first", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            ClearSearch();
+            return;
+        }
+
+        _searchResults = FileSearchSvc.SearchByPartialFilename(ProjectState.CurrentProject, _searchQuery);
+        _searchPerformed = true;
+
+        if (_searchResults.Count == 0)
+        {
+            Snackbar.Add($"No files found matching '{_searchQuery}'", Severity.Info);
+        }
+    }
+
+    private IEnumerable<UniqueFileInfo> GetFilteredFiles()
+    {
+        var filesToShow = _allFiles.AsEnumerable();
+
+        if (_showOnlyDuplicates)
+            filesToShow = filesToShow.Where(f => f.UsageCount > 1);
+
+        return filesToShow;
+    }
+
+    private void SearchByProducerId(string producerId)
+    {
+        if (ProjectState.CurrentProject == null)
+            return;
+
+        _searchResults = FileSearchSvc.SearchByProducerId(ProjectState.CurrentProject, producerId);
+        _searchPerformed = true;
+        _searchQuery = $"[Producer: {producerId}]";
+    }
+
+    /// <summary>
+    /// Save project to a generated file in the same directory as source (to preserve relative paths)
+    /// </summary>
+    private async Task<string> SaveToSourceDirectoryAsync(Mlt project, string baseName)
+    {
+        // Validate CurrentProjectPath is set
+        if (string.IsNullOrWhiteSpace(ProjectState.CurrentProjectPath))
+            throw new InvalidOperationException("Project path not set - cannot save generated MLT");
+
+        // IMPORTANT: Save in same directory as source project to preserve relative paths
+        // MLT files often reference media with relative paths - moving the MLT breaks these
+        var sourceDir = Path.GetDirectoryName(ProjectState.CurrentProjectPath)
+            ?? throw new InvalidOperationException("Could not determine source directory");
+
+        // Sanitize baseName - strip path components and remove invalid characters
+        var sanitizedBaseName = Path.GetFileName(baseName); // Prevents path traversal
+        var invalidChars = Path.GetInvalidFileNameChars();
+        sanitizedBaseName = string.Concat(sanitizedBaseName.Select(c => invalidChars.Contains(c) ? '_' : c));
+
+        // Generate unique filename
+        var fileName = $"{sanitizedBaseName}_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}.mlt";
+        var outputPath = Path.Combine(sourceDir, fileName);
+
+        // Save project - SaveProjectAsync returns the actual saved path
+        var actualPath = await ShotcutSvc.SaveProjectAsync(project, outputPath);
+
+        return actualPath;
+    }
+
+    /// <summary>
+    /// Shuffle playlist and open render dialog
+    /// </summary>
+    private async Task ShuffleAndAddToQueueAsync(int playlistIndex)
+    {
+        try
+        {
+            if (ProjectState.CurrentProject == null)
+                return;
+
+            // Create a copy of the project for shuffling (don't modify the loaded one)
+            var projectCopy = await ShotcutSvc.LoadProjectAsync(ProjectState.CurrentProjectPath);
+            if (projectCopy == null)
+            {
+                Snackbar.Add("Failed to load project copy", Severity.Error);
+                return;
+            }
+
+            // Shuffle the playlist
+            ShotcutSvc.ShufflePlaylist(projectCopy, playlistIndex, _avoidConsecutiveSameSource);
+
+            // Get the track index for this playlist
+            var trackIndex = ShotcutSvc.GetTrackIndexForPlaylist(projectCopy, playlistIndex);
+
+            // Get playlist name for temp file
+            var playlist = projectCopy.Playlist[playlistIndex];
+            var baseName = $"shuffled_{playlist.Name}".Replace(" ", "_");
+
+            // Save to temp file
+            var tempPath = await SaveToSourceDirectoryAsync(projectCopy, baseName);
+
+            // Debug: Verify file was created
+            if (!File.Exists(tempPath))
+            {
+                Snackbar.Add($"Error: Temp file was not created at {tempPath}", Severity.Error);
+                return;
+            }
+
+            // Open render dialog with pre-populated source path
+            // For single playlist shuffle: hide track selection UI, but pre-select only the shuffled track
+            // Determine if this is a video or audio track
+            var hasVideo = playlist.Property?.Any(p => p.Name == "shotcut:video" && p.Text == "1") ?? false;
+
+            _dialogSourcePath = tempPath;
+            _showTrackSelection = false;
+            _showRenderRange = true;
+            _preSelectedVideoTracks = hasVideo ? trackIndex.ToString() : null;
+            _preSelectedAudioTracks = hasVideo ? null : trackIndex.ToString();
+            _showAddRenderDialog = true;
+            StateHasChanged();
+
+            Snackbar.Add($"Shuffled playlist ready for rendering", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    /// <summary>
+    /// Generate random playlist and open render dialog
+    /// </summary>
+    private async Task GenerateRandomAndAddToQueueAsync()
+    {
+        try
+        {
+            if (ProjectState.CurrentProject == null || _selectedPlaylists.Count == 0)
+            {
+                Snackbar.Add("Please select at least one playlist", Severity.Warning);
+                return;
+            }
+
+            // Create a copy of the project for generation
+            var projectCopy = await ShotcutSvc.LoadProjectAsync(ProjectState.CurrentProjectPath);
+            if (projectCopy == null)
+            {
+                Snackbar.Add("Failed to load project copy", Severity.Error);
+                return;
+            }
+
+            // Generate random playlist
+            var sourcePlaylists = _selectedPlaylists
+                .Select(idx => (idx, _targetSeconds.GetValueOrDefault(idx, 0)))
+                .ToList();
+
+            var (newPlaylist, trackIndex) = ShotcutSvc.GenerateRandomPlaylist(
+                projectCopy,
+                sourcePlaylists,
+                _durationWeight,
+                _numberOfVideosWeight
+            );
+
+            // Save to temp file
+            var baseName = $"random_{newPlaylist.Name}".Replace(" ", "_");
+            var tempPath = await SaveToSourceDirectoryAsync(projectCopy, baseName);
+
+            // Open render dialog with pre-populated source path
+            // For generated random: hide track selection UI, pre-select only the generated track
+            // Generated playlists are always video tracks (with audio)
+            _dialogSourcePath = tempPath;
+            _showTrackSelection = false;
+            _showRenderRange = false;
+            _preSelectedVideoTracks = trackIndex.ToString();
+            _preSelectedAudioTracks = null; // The video track includes audio
+            _showAddRenderDialog = true;
+            StateHasChanged();
+
+            Snackbar.Add($"Random playlist with {newPlaylist.Entry.Count} clips ready for rendering", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to project changes to trigger re-render
+        ProjectState.OnProjectChanged += StateHasChanged;
+
+        // Load files if project is already loaded
+        if (ProjectState.IsProjectLoaded)
+        {
+            _allFiles = FileSearchSvc.GetUniqueFiles(ProjectState.CurrentProject!);
+        }
+    }
+
+    private async Task HandleJobAdded(RenderJob job)
+    {
+        try
+        {
+            var jobId = await QueueService.AddJobAsync(job);
+            Snackbar.Add($"Added job to render queue: {Path.GetFileName(job.SourceVideoPath)}", Severity.Success);
+
+            // Notify about queue status if paused
+            if (QueueService.IsQueuePaused)
+            {
+                Snackbar.Add("Queue is paused - navigate to Render Queue to start processing", Severity.Info, config =>
+                {
+                    config.RequireInteraction = true;
+                    config.Action = "Go to Queue";
+                    config.ActionColor = Color.Primary;
+                    config.OnClick = snackbar =>
+                    {
+                        NavigationManager.NavigateTo("/render-queue");
+                        return Task.CompletedTask;
+                    };
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error adding job: {ex.Message}", Severity.Error);
+        }
+    }
+
+    public void Dispose()
+    {
+        // Unsubscribe from events
+        ProjectState.OnProjectChanged -= StateHasChanged;
+    }
+}
