@@ -61,114 +61,97 @@ public class MeltRenderService
             Debug.WriteLine("Ignoring UseHardwareAcceleration and using CPU multi-threading instead");
         }
 
-        // Apply track selection if specified
+        // Apply track selection if specified, using TemporaryFileManager for cleanup
+        // Temp file must be in source directory to preserve relative paths in MLT
         string actualMltPath = mltFilePath;
+        TemporaryFileManager? tempManager = null;
+
         if (!string.IsNullOrEmpty(selectedVideoTracks) || !string.IsNullOrEmpty(selectedAudioTracks))
         {
-            actualMltPath = await ApplyTrackSelectionAsync(mltFilePath, selectedVideoTracks, selectedAudioTracks);
+            var sourceDir = Path.GetDirectoryName(mltFilePath);
+            tempManager = new TemporaryFileManager(sourceDir);
+            actualMltPath = await ApplyTrackSelectionAsync(mltFilePath, selectedVideoTracks, selectedAudioTracks, tempManager);
         }
-
-        var arguments = BuildMeltArguments(actualMltPath, outputPath, settings, inPoint, outPoint);
-        Debug.WriteLine($"melt command: {_meltExecutable} {arguments}");
-
-        var startTime = DateTime.Now;
-
-        var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = _meltExecutable,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            },
-            EnableRaisingEvents = true
-        };
-
-        var tcs = new TaskCompletionSource<bool>();
-
-        process.ErrorDataReceived += (sender, e) =>
-        {
-            if (string.IsNullOrEmpty(e.Data)) return;
-
-            // Parse progress from stderr
-            var match = ProgressRegex.Match(e.Data);
-            if (match.Success)
-            {
-                var currentFrame = int.Parse(match.Groups[1].Value);
-                var percentage = int.Parse(match.Groups[2].Value);
-
-                progress?.Report(new RenderProgress
-                {
-                    CurrentFrame = currentFrame,
-                    Percentage = percentage,
-                    ElapsedTime = DateTime.Now - startTime
-                });
-            }
-            else
-            {
-                Debug.WriteLine($"melt: {e.Data}");
-            }
-        };
-
-        process.Exited += (sender, e) =>
-        {
-            tcs.SetResult(process.ExitCode == 0);
-        };
-
-        // Register cancellation with graceful shutdown
-        cancellationToken.Register(async () =>
-        {
-            Debug.WriteLine("Melt render cancelled - initiating graceful shutdown...");
-
-            // Use ProcessManager for graceful shutdown with process tree cleanup
-            await ProcessManager.GracefulShutdownAsync(
-                process,
-                gracefulTimeoutMs: 3000,
-                processName: "melt");
-        });
 
         try
         {
+            var arguments = BuildMeltArguments(actualMltPath, outputPath, settings, inPoint, outPoint);
+            Debug.WriteLine($"melt command: {_meltExecutable} {arguments}");
+
+            var startTime = DateTime.Now;
+
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = _meltExecutable,
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                },
+                EnableRaisingEvents = true
+            };
+
+            var tcs = new TaskCompletionSource<bool>();
+
+            process.ErrorDataReceived += (sender, e) =>
+            {
+                if (string.IsNullOrEmpty(e.Data)) return;
+
+                // Parse progress from stderr
+                var match = ProgressRegex.Match(e.Data);
+                if (match.Success)
+                {
+                    var currentFrame = int.Parse(match.Groups[1].Value);
+                    var percentage = int.Parse(match.Groups[2].Value);
+
+                    progress?.Report(new RenderProgress
+                    {
+                        CurrentFrame = currentFrame,
+                        Percentage = percentage,
+                        ElapsedTime = DateTime.Now - startTime
+                    });
+                }
+                else
+                {
+                    Debug.WriteLine($"melt: {e.Data}");
+                }
+            };
+
+            process.Exited += (sender, e) =>
+            {
+                tcs.SetResult(process.ExitCode == 0);
+            };
+
+            // Register cancellation with graceful shutdown
+            cancellationToken.Register(async () =>
+            {
+                Debug.WriteLine("Melt render cancelled - initiating graceful shutdown...");
+
+                // Use ProcessManager for graceful shutdown with process tree cleanup
+                await ProcessManager.GracefulShutdownAsync(
+                    process,
+                    gracefulTimeoutMs: 3000,
+                    processName: "melt");
+            });
+
             process.Start();
             process.BeginErrorReadLine();
             process.BeginOutputReadLine();
 
-            var renderResult = await tcs.Task;
-
-            // Clean up temporary MLT file if we created one
-            if (actualMltPath != mltFilePath && File.Exists(actualMltPath))
-            {
-                try
-                {
-                    File.Delete(actualMltPath);
-                    Debug.WriteLine($"Deleted temporary MLT file: {actualMltPath}");
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Failed to delete temporary MLT file: {ex.Message}");
-                }
-            }
-
-            return renderResult;
+            return await tcs.Task;
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"melt execution error: {ex.Message}");
-
-            // Clean up temporary MLT file on error
-            if (actualMltPath != mltFilePath && File.Exists(actualMltPath))
-            {
-                try
-                {
-                    File.Delete(actualMltPath);
-                }
-                catch { }
-            }
-
             return false;
+        }
+        finally
+        {
+            // Temp file cleanup handled by TemporaryFileManager
+            tempManager?.Dispose();
         }
     }
 
@@ -176,7 +159,7 @@ public class MeltRenderService
     /// Apply track selection to an MLT project by creating a modified copy
     /// IMPORTANT: System tracks (like "black" background) are NEVER hidden - they're required for rendering
     /// </summary>
-    private async Task<string> ApplyTrackSelectionAsync(string mltFilePath, string? selectedVideoTracks, string? selectedAudioTracks)
+    private async Task<string> ApplyTrackSelectionAsync(string mltFilePath, string? selectedVideoTracks, string? selectedAudioTracks, TemporaryFileManager tempManager)
     {
         Debug.WriteLine($"Applying track selection - Video: {selectedVideoTracks}, Audio: {selectedAudioTracks}");
 
@@ -254,11 +237,8 @@ public class MeltRenderService
             Debug.WriteLine($"Track {trackInfo.Index} ({trackInfo.Name}): hide={track.Hide ?? "none"}");
         }
 
-        // Save modified project to a temporary file
-        var tempPath = Path.Combine(
-            Path.GetDirectoryName(mltFilePath) ?? Path.GetTempPath(),
-            $"temp_tracks_{Guid.NewGuid().ToString()[..8]}.mlt"
-        );
+        // Save modified project to a temporary file using TemporaryFileManager
+        var tempPath = tempManager.GetTempFilePath("melt_tracks", ".mlt");
 
         await _xmlService.SerializeAsync(tempPath, project);
         Debug.WriteLine($"Created temporary MLT with track selection: {tempPath}");

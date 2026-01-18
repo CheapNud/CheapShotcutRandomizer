@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Net.Http;
 using System.Security.Principal;
 using CheapShotcutRandomizer.Models;
+using CheapHelpers.MediaProcessing.Services.Utilities;
 
 namespace CheapShotcutRandomizer.Services;
 
@@ -216,9 +217,12 @@ public class DependencyInstaller
 
             ReportProgress(10, "Downloading portable version...");
 
-            // Download file
+            // Download file using TemporaryFileManager for automatic cleanup
             var downloadFileName = Path.GetFileName(new Uri(downloadUrl).LocalPath);
-            var downloadPath = Path.Combine(Path.GetTempPath(), downloadFileName);
+            var extension = Path.GetExtension(downloadFileName);
+
+            using var tempManager = new TemporaryFileManager();
+            var downloadPath = tempManager.GetTempFilePath($"download_{toolName}", extension);
 
             using (var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
             {
@@ -262,8 +266,7 @@ public class DependencyInstaller
                 );
             }
 
-            // Clean up download
-            File.Delete(downloadPath);
+            // Temp file cleanup handled by TemporaryFileManager.Dispose()
 
             ReportProgress(90, "Locating executables...");
 
