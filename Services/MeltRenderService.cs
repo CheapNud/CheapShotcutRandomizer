@@ -66,15 +66,15 @@ public class MeltRenderService
         string actualMltPath = mltFilePath;
         TemporaryFileManager? tempManager = null;
 
-        if (!string.IsNullOrEmpty(selectedVideoTracks) || !string.IsNullOrEmpty(selectedAudioTracks))
-        {
-            var sourceDir = Path.GetDirectoryName(mltFilePath);
-            tempManager = new TemporaryFileManager(sourceDir);
-            actualMltPath = await ApplyTrackSelectionAsync(mltFilePath, selectedVideoTracks, selectedAudioTracks, tempManager);
-        }
-
         try
         {
+            if (!string.IsNullOrEmpty(selectedVideoTracks) || !string.IsNullOrEmpty(selectedAudioTracks))
+            {
+                var sourceDir = Path.GetDirectoryName(mltFilePath)
+                    ?? throw new ArgumentException("Cannot determine source directory from MLT path", nameof(mltFilePath));
+                tempManager = new TemporaryFileManager(sourceDir);
+                actualMltPath = await ApplyTrackSelectionAsync(mltFilePath, selectedVideoTracks, selectedAudioTracks, tempManager);
+            }
             var arguments = BuildMeltArguments(actualMltPath, outputPath, settings, inPoint, outPoint);
             Debug.WriteLine($"melt command: {_meltExecutable} {arguments}");
 
