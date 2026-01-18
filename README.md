@@ -54,9 +54,27 @@ Uses simulated annealing optimization to select the best combination of clips ba
 - Duration weight preferences
 - Number of videos weight preferences
 
+## Building
+
+### Prerequisites
+- .NET 10.0 SDK
+
+### Build
+```bash
+dotnet build
+```
+
+### Publish Single Executable
+```bash
+dotnet publish -c Release -r win-x64
+```
+
+Output: `bin/Release/net10.0/win-x64/publish/CheapShotcutRandomizer.exe`
+
+This creates a self-contained single-file executable (~90MB) that includes the .NET runtime.
+
 ## Requirements
 
-- .NET 10.0
 - Windows 10/11
 - FFmpeg (video encoding)
 - Melt (Shotcut rendering) - Install [Shotcut](https://shotcut.org/download/)
