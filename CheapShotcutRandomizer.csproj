@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
@@ -72,7 +72,7 @@
 
   <ItemGroup>
     <ProjectReference Include="CheapShotcutRandomizer.Core\CheapShotcutRandomizer.Core.csproj" />
-    <PackageReference Include="CheapHelpers.MediaProcessing" Version="2.0.0" />
+    <PackageReference Include="CheapHelpers.MediaProcessing" Version="2.0.1" />
   </ItemGroup>
 
   <ItemGroup>
