@@ -22,6 +22,11 @@ class Program
         var builder = new CheapAvaloniaBlazor.Hosting.HostBuilder()
             .WithTitle("Cheap Shotcut Randomizer")
             .WithSize(1000, 800)
+            .ConfigureOptions(options =>
+            {
+                options.EnableDevTools = false;
+                options.EnableContextMenu = false;
+            })
             .AddMudBlazor(config =>
             {
                 config.SnackbarConfiguration.PositionClass = MudBlazor.Defaults.Classes.Position.BottomRight;
