@@ -40,10 +40,10 @@
     <PackageReference Include="CheapHelpers.EF" Version="2.0.0" />
     <PackageReference Include="CheapHelpers.Models" Version="2.0.0" />
     <PackageReference Include="CheapHelpers.Services" Version="2.0.0" />
-<PackageReference Include="SharpCompress" Version="0.44.3" />
+<PackageReference Include="SharpCompress" Version="0.44.5" />
 
     <!-- CheapAvaloniaBlazor Package Reference -->
-    <PackageReference Include="CheapAvaloniaBlazor" Version="1.2.0" />
+    <PackageReference Include="CheapAvaloniaBlazor" Version="1.2.4" />
 
     <!-- MudBlazor for UI components -->
     <PackageReference Include="MudBlazor" Version="8.15.0" />
