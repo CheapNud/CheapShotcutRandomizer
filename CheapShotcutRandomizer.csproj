@@ -4,7 +4,6 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
     <OutputType>WinExe</OutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
@@ -43,7 +42,7 @@
 <PackageReference Include="SharpCompress" Version="0.44.5" />
 
     <!-- CheapAvaloniaBlazor Package Reference -->
-    <PackageReference Include="CheapAvaloniaBlazor" Version="1.2.4" />
+    <PackageReference Include="CheapAvaloniaBlazor" Version="2.0.0" />
 
     <!-- MudBlazor for UI components -->
     <PackageReference Include="MudBlazor" Version="8.15.0" />
