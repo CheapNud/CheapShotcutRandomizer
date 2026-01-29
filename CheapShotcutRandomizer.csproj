@@ -26,8 +26,9 @@
     <Version>2.0.0</Version>
 
     <!-- Single-file publish settings -->
+    <!-- Note: SelfContained removed from csproj to allow test project references (NETSDK1151).
+         Use: dotnet publish -c Release with the self-contained flag -->
     <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
