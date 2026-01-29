@@ -24,12 +24,9 @@ public class RenderJobCardTests : BunitContext, IAsyncLifetime
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
-    public Task InitializeAsync() => Task.CompletedTask;
+    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
 
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
+    public new ValueTask DisposeAsync() => base.DisposeAsync();
 
     [Fact]
     public void RenderJobCard_Renders_Job_Information()
