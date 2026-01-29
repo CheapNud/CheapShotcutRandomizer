@@ -43,7 +43,7 @@
 <PackageReference Include="SharpCompress" Version="0.44.5" />
 
     <!-- CheapAvaloniaBlazor Package Reference -->
-    <PackageReference Include="CheapAvaloniaBlazor" Version="2.0.1" />
+    <PackageReference Include="CheapAvaloniaBlazor" Version="2.0.2" />
 
     <!-- MudBlazor for UI components -->
     <PackageReference Include="MudBlazor" Version="8.15.0" />
