@@ -655,7 +655,7 @@
     private async Task HandleClearAllJobs()
     {
         // Show confirmation dialog
-        bool? dialogResult = await DialogService.ShowMessageBox(
+        bool? dialogResult = await DialogService.ShowMessageBoxAsync(
             "Clear All Jobs",
             "Are you sure you want to clear all jobs from the queue? This will cancel any running jobs and delete all completed and failed jobs. This action cannot be undone.",
             yesText: "Clear All",
