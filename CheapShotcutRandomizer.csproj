@@ -40,10 +40,10 @@
     <PackageReference Include="CheapHelpers.EF" Version="2.0.0" />
     <PackageReference Include="CheapHelpers.Models" Version="2.0.0" />
     <PackageReference Include="CheapHelpers.Services" Version="2.0.0" />
-<PackageReference Include="SharpCompress" Version="0.44.5" />
+		<PackageReference Include="SharpCompress" Version="0.46.0" />
 
     <!-- CheapAvaloniaBlazor Package Reference -->
-    <PackageReference Include="CheapAvaloniaBlazor" Version="2.0.2" />
+    <PackageReference Include="CheapAvaloniaBlazor" Version="2.1.1" />
 
     <!-- MudBlazor for UI components -->
     <PackageReference Include="MudBlazor" Version="8.15.0" />
@@ -52,12 +52,12 @@
     <PackageReference Include="FFMpegCore" Version="5.4.0" />
 
     <!-- Hardware detection (WMI) -->
-    <PackageReference Include="System.Management" Version="10.0.2" />
+    <PackageReference Include="System.Management" Version="10.0.3" />
 
     <!-- Entity Framework Core for render queue database -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

@@ -174,7 +174,7 @@ public class FFmpegRenderService
         string audioPath,
         string outputPath,
         FFmpegRenderSettings settings,
-        IProgress<double> progress = null,
+        IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
         if (!settings.UseHardwareAcceleration)
@@ -286,7 +286,7 @@ public class FFmpegRenderService
         string outputFolder,
         int fps,
         bool useHardwareDecode = true,
-        IProgress<double> progress = null,
+        IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(outputFolder);

@@ -4,8 +4,8 @@
 @using CheapAvaloniaBlazor.Services
 @using CheapHelpers.MediaProcessing.Services
 @using SharpCompress.Archives
-@using SharpCompress.Common
-@inject SettingsService SettingsService
+@using SharpCompress.Readers
+@inject CheapShotcutRandomizer.Services.SettingsService SettingsService
 @inject SvpDetectionService SvpDetection
 @inject IDesktopInteropService DesktopInterop
 @inject ISnackbar Snackbar
@@ -1681,18 +1681,15 @@ except Exception as e:
                 {
                     System.Diagnostics.Debug.WriteLine($"Starting extraction of {downloadPath}...");
 
-                    using (var archive = ArchiveFactory.Open(downloadPath))
+                    var extractionReaderOptions = new ReaderOptions { ExtractFullPath = true, Overwrite = true };
+                    using (var archive = ArchiveFactory.OpenArchive(downloadPath, extractionReaderOptions))
                     {
                         System.Diagnostics.Debug.WriteLine($"Archive opened, extracting {archive.Entries.Count()} entries...");
 
                         int extractedCount = 0;
                         foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
                         {
-                            entry.WriteToDirectory(extractPath, new ExtractionOptions()
-                            {
-                                ExtractFullPath = true,
-                                Overwrite = true
-                            });
+                            entry.WriteToDirectory(extractPath);
                             extractedCount++;
 
                             // Log progress every 10 files
@@ -2211,10 +2208,11 @@ except Exception as e:
                     {
                         try
                         {
-                            using var archive = SharpCompress.Archives.SevenZip.SevenZipArchive.Open(modelDownloadPath);
+                            var modelReaderOptions = new ReaderOptions { ExtractFullPath = true, Overwrite = true };
+                            using var archive = SharpCompress.Archives.SevenZip.SevenZipArchive.OpenArchive(modelDownloadPath, modelReaderOptions);
                             foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
                             {
-                                entry.WriteToDirectory(modelExtractPath, new SharpCompress.Common.ExtractionOptions { ExtractFullPath = true, Overwrite = true });
+                                entry.WriteToDirectory(modelExtractPath);
                             }
                             modelExtracted = true;
                         }
