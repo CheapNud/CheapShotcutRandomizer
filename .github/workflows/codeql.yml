@@ -51,11 +51,11 @@ jobs:
 
     - name: Restore dependencies
       working-directory: repo
-      run: dotnet restore CheapShotcutRandomizer.sln
+      run: dotnet restore CheapShotcutRandomizer.slnx
 
     - name: Build for CodeQL
       working-directory: repo
-      run: dotnet build CheapShotcutRandomizer.sln --configuration Release --no-restore
+      run: dotnet build CheapShotcutRandomizer.slnx --configuration Release --no-restore
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3

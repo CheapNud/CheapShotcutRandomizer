@@ -65,7 +65,7 @@ type/build:
   - changed-files:
     - any-glob-to-any-file:
       - '**/*.csproj'
-      - '**/*.sln'
+      - '**/*.slnx'
       - '.github/**/*'
 
 # Changes

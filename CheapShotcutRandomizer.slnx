@@ -1,0 +1,10 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="CheapShotcutRandomizer.Core/CheapShotcutRandomizer.Core.csproj" />
+  <Project Path="CheapShotcutRandomizer.csproj" />
+  <Project Path="CheapShotcutRandomizer.Tests/CheapShotcutRandomizer.Tests.csproj" />
+</Solution>

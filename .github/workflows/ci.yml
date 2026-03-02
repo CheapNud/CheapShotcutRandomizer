@@ -57,11 +57,11 @@ jobs:
 
     - name: Restore dependencies
       working-directory: repo
-      run: dotnet restore CheapShotcutRandomizer.sln
+      run: dotnet restore CheapShotcutRandomizer.slnx
 
     - name: Build solution
       working-directory: repo
-      run: dotnet build CheapShotcutRandomizer.sln --configuration ${{ matrix.configuration }} --no-restore
+      run: dotnet build CheapShotcutRandomizer.slnx --configuration ${{ matrix.configuration }} --no-restore
 
     - name: Run tests
       working-directory: repo
@@ -120,16 +120,16 @@ jobs:
 
     - name: Restore dependencies
       working-directory: repo
-      run: dotnet restore CheapShotcutRandomizer.sln
+      run: dotnet restore CheapShotcutRandomizer.slnx
 
     - name: Check code formatting
       working-directory: repo
-      run: dotnet format CheapShotcutRandomizer.sln --verify-no-changes --verbosity diagnostic
+      run: dotnet format CheapShotcutRandomizer.slnx --verify-no-changes --verbosity diagnostic
       continue-on-error: true
 
     - name: Run code analysis
       working-directory: repo
-      run: dotnet build CheapShotcutRandomizer.sln --configuration Release /p:TreatWarningsAsErrors=false /p:WarningLevel=4
+      run: dotnet build CheapShotcutRandomizer.slnx --configuration Release /p:TreatWarningsAsErrors=false /p:WarningLevel=4
 
   dependency-check:
     name: Dependency Vulnerability Scan
@@ -156,7 +156,7 @@ jobs:
 
     - name: Restore dependencies
       working-directory: repo
-      run: dotnet restore CheapShotcutRandomizer.sln
+      run: dotnet restore CheapShotcutRandomizer.slnx
 
     - name: Check for vulnerable packages
       working-directory: repo
