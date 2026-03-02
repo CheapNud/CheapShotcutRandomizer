@@ -35,15 +35,15 @@
 
   <ItemGroup>
     <!-- NuGet Package References -->
-    <PackageReference Include="CheapHelpers" Version="2.1.0" />
-    <PackageReference Include="CheapHelpers.Blazor" Version="2.0.1" />
+    <PackageReference Include="CheapHelpers" Version="3.0.0" />
+    <PackageReference Include="CheapHelpers.Blazor" Version="3.0.0" />
     <PackageReference Include="CheapHelpers.EF" Version="2.0.1" />
     <PackageReference Include="CheapHelpers.Models" Version="2.0.1" />
     <PackageReference Include="CheapHelpers.Services" Version="2.0.1" />
-		<PackageReference Include="SharpCompress" Version="0.46.3" />
+		<PackageReference Include="SharpCompress" Version="0.46.4" />
 
     <!-- CheapAvaloniaBlazor Package Reference -->
-    <PackageReference Include="CheapAvaloniaBlazor" Version="2.1.1" />
+    <PackageReference Include="CheapAvaloniaBlazor" Version="3.0.0" />
 
     <!-- MudBlazor for UI components -->
     <PackageReference Include="MudBlazor" Version="9.0.0" />
