@@ -17,6 +17,9 @@
             <MudText Typo="Typo.body2">
                 Output: @Job.OutputPath
             </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Added @Job.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            </MudText>
         </MudItem>
 
         @* File size information *@
