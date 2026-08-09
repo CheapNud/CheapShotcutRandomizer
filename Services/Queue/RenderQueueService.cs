@@ -706,15 +706,8 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
 
                 await repository.UpdateAsync(crashedJob);
 
-                // Re-enqueue if still pending
-                if (crashedJob.Status == RenderJobStatus.Pending)
-                {
-                    await _taskQueue.QueueBackgroundWorkItemAsync(async ct =>
-                    {
-                        await ProcessJobAsync(crashedJob.JobId, ct);
-                    });
-                }
-
+                // No enqueue here - the Pending sweep below picks these up, and
+                // enqueueing in both places produced duplicate work items
                 Debug.WriteLine($"Recovered crashed job {crashedJob.JobId}, status: {crashedJob.Status}");
             }
         }
