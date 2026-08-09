@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: windows
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build, package, and publish to Forgejo
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+
+          powershell -ExecutionPolicy Bypass -File deploy/publish.ps1 -Version $ver
+          if ($LASTEXITCODE -ne 0) { throw "publish failed ($LASTEXITCODE)" }
+
+          $name = "CheapShotcutRandomizer-$ver-win-x64.zip"
+          $zip = Join-Path (Get-Location) $name
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          # Windows' bsdtar (tar.exe) writes ZIP entries with the spec-mandated forward-slash
+          # separator and deflates fast. Both Compress-Archive and .NET Framework's ZipFile
+          # (what PS 5.1 uses) emit backslash separators, which violate the ZIP spec and
+          # make extractors produce flat files named "CheapShotcutRandomizer\..." instead
+          # of a directory tree.
+          tar.exe --format zip --options zip:compression=deflate -c -f $zip -C deploy/out CheapShotcutRandomizer
+          if ($LASTEXITCODE -ne 0) { throw "zip failed ($LASTEXITCODE)" }
+
+          $token = "${{ github.token }}"
+          $api = "http://192.168.1.15:3000/api/v1/repos/${{ github.repository }}"
+          $body = @{
+            tag_name = "${{ github.ref_name }}"
+            name     = "CheapShotcutRandomizer $ver"
+            body     = "Self-contained Windows build. Download the zip, extract the whole CheapShotcutRandomizer folder, run CheapShotcutRandomizer.exe (no .NET install needed on the target machine)."
+          } | ConvertTo-Json
+
+          $rel = Invoke-RestMethod -Method Post -Uri "$api/releases" -Headers @{ Authorization = "token $token" } -ContentType "application/json" -Body $body
+
+          & curl.exe -sS --fail -X POST -H "Authorization: token $token" -F "attachment=@$zip" "$api/releases/$($rel.id)/assets?name=$name"
+          if ($LASTEXITCODE -ne 0) { throw "asset upload failed ($LASTEXITCODE)" }
+
+          Write-Host "Published release $ver with asset $zip"
