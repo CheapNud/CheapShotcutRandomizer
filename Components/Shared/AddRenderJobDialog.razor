@@ -14,89 +14,145 @@
         <MudText Typo="Typo.h5">Add Render Job</MudText>
     </TitleContent>
     <DialogContent>
-        <MudStack Spacing="3">
+        <MudStack Spacing="4">
 
-            <MudStack Row="true" Spacing="2">
+            @* Source & Output *@
+            <MudStack Spacing="2">
                 <MudTextField @bind-Value="_sourcePath"
-                              Label="Source File"
+                              Label="Source (.mlt project)"
                               Variant="Variant.Outlined"
                               FullWidth="true"
-                              ReadOnly="true" />
-                <MudButton Variant="Variant.Filled"
-                           Color="Color.Primary"
-                           OnClick="@BrowseSource">
-                    Browse...
-                </MudButton>
-            </MudStack>
-
-            <MudStack Row="true" Spacing="2">
+                              ReadOnly="true"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                              OnAdornmentClick="@BrowseSource" />
                 <MudTextField @bind-Value="_outputPath"
-                              Label="Output Path"
+                              Label="Output File"
                               Variant="Variant.Outlined"
                               FullWidth="true"
-                              ReadOnly="true" />
-                <MudButton Variant="Variant.Filled"
-                           Color="Color.Primary"
-                           OnClick="@BrowseOutput">
-                    Browse...
-                </MudButton>
+                              ReadOnly="true"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                              OnAdornmentClick="@BrowseOutput" />
             </MudStack>
-
-            @* Source type auto-detected from file extension *@
-            @if (!string.IsNullOrEmpty(_sourcePath))
-            {
-                <MudAlert Severity="Severity.Info" Dense="true">
-                    Source Type: @(_isMltSource ? "MLT Project" : "Video File")
-                </MudAlert>
-            }
-
-            @* Note: AI/upscaling options (RIFE, Real-CUGAN, Real-ESRGAN, Non-AI upscaling) have been moved to CheapUpscaler *@
-            @* Render the output here, then use CheapUpscaler to apply AI upscaling/interpolation *@
 
             @* MLT Encoding Settings - Show ONLY for MLT source files *@
             @if (_isMltSource)
             {
-                <MudDivider />
-                <MudText Typo="Typo.subtitle2">MLT Render Settings</MudText>
+                <div>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Videocam" Size="Size.Small" Color="Color.Primary" />
+                        <MudText Typo="Typo.subtitle1">Video</MudText>
+                    </MudStack>
 
-                <MudSlider @bind-Value="_mltThreads"
-                           Min="1"
-                           Max="@_maxThreads"
-                           Step="1"
-                           Color="Color.Primary"
-                           Style="width: 100%;">
-                    CPU Threads: @_mltThreads
-                </MudSlider>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="6">
+                            <MudSelect @bind-Value="_mltVideoCodec"
+                                       Label="Encoder"
+                                       Variant="Variant.Outlined"
+                                       T="string"
+                                       Margin="Margin.Dense">
+                                <MudSelectItem Value="@("libx264")" T="string">H.264 (libx264) — CPU</MudSelectItem>
+                                <MudSelectItem Value="@("libx265")" T="string">H.265/HEVC (libx265) — CPU</MudSelectItem>
+                                @foreach (var encoder in HardwareEncoders)
+                                {
+                                    <MudSelectItem Value="@encoder.CodecName" T="string" Disabled="@(!encoder.IsAvailable)">
+                                        @encoder.DisplayName — @encoder.VendorType@(encoder.IsAvailable ? $" (~{encoder.EstimatedSpeedupFactor:F1}x faster)" : " (not detected)")
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            @if (IsCpuCodec)
+                            {
+                                <MudSelect @bind-Value="_mltPreset"
+                                           Label="Encoding Preset"
+                                           Variant="Variant.Outlined"
+                                           T="string"
+                                           Margin="Margin.Dense">
+                                    <MudSelectItem Value="@("ultrafast")" T="string">Ultra Fast</MudSelectItem>
+                                    <MudSelectItem Value="@("superfast")" T="string">Super Fast</MudSelectItem>
+                                    <MudSelectItem Value="@("veryfast")" T="string">Very Fast</MudSelectItem>
+                                    <MudSelectItem Value="@("faster")" T="string">Faster</MudSelectItem>
+                                    <MudSelectItem Value="@("fast")" T="string">Fast</MudSelectItem>
+                                    <MudSelectItem Value="@("medium")" T="string">Medium (Recommended)</MudSelectItem>
+                                    <MudSelectItem Value="@("slow")" T="string">Slow</MudSelectItem>
+                                    <MudSelectItem Value="@("slower")" T="string">Slower</MudSelectItem>
+                                </MudSelect>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-4">
+                                    Hardware encoder — quality-based VBR, preset managed by the driver
+                                </MudText>
+                            }
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudSlider @bind-Value="_mltCrf"
+                                       Min="15"
+                                       Max="32"
+                                       Step="1"
+                                       Color="Color.Primary">
+                                Quality (@QualityLabel): @_mltCrf — lower is better
+                            </MudSlider>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudSlider @bind-Value="_mltThreads"
+                                       Min="1"
+                                       Max="@_maxThreads"
+                                       Step="1"
+                                       Color="Color.Primary">
+                                CPU Threads: @_mltThreads
+                            </MudSlider>
+                        </MudItem>
+                    </MudGrid>
+                </div>
 
-                <MudSelect @bind-Value="_mltPreset"
-                           Label="Quality Preset"
-                           Variant="Variant.Outlined"
-                           T="string">
-                    <MudSelectItem Value="@("ultrafast")" T="string">Ultra Fast</MudSelectItem>
-                    <MudSelectItem Value="@("superfast")" T="string">Super Fast</MudSelectItem>
-                    <MudSelectItem Value="@("veryfast")" T="string">Very Fast</MudSelectItem>
-                    <MudSelectItem Value="@("faster")" T="string">Faster</MudSelectItem>
-                    <MudSelectItem Value="@("fast")" T="string">Fast</MudSelectItem>
-                    <MudSelectItem Value="@("medium")" T="string">Medium (Recommended)</MudSelectItem>
-                    <MudSelectItem Value="@("slow")" T="string">Slow</MudSelectItem>
-                    <MudSelectItem Value="@("slower")" T="string">Slower</MudSelectItem>
-                </MudSelect>
+                <div>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.MusicNote" Size="Size.Small" Color="Color.Secondary" />
+                        <MudText Typo="Typo.subtitle1">Audio</MudText>
+                    </MudStack>
 
-                <MudSlider @bind-Value="_mltCrf"
-                           Min="15"
-                           Max="28"
-                           Step="1"
-                           Color="Color.Primary"
-                           Style="width: 100%;">
-                    Quality (CRF): @_mltCrf (Lower = Better)
-                </MudSlider>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="6">
+                            <MudSelect @bind-Value="_mltAudioCodec"
+                                       Label="Codec"
+                                       Variant="Variant.Outlined"
+                                       T="string"
+                                       Margin="Margin.Dense">
+                                <MudSelectItem Value="@("aac")" T="string">AAC</MudSelectItem>
+                                <MudSelectItem Value="@("libmp3lame")" T="string">MP3</MudSelectItem>
+                                <MudSelectItem Value="@("ac3")" T="string">AC-3</MudSelectItem>
+                                <MudSelectItem Value="@("flac")" T="string">FLAC (lossless)</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudSelect @bind-Value="_mltAudioBitrate"
+                                       Label="Bitrate"
+                                       Variant="Variant.Outlined"
+                                       T="string"
+                                       Margin="Margin.Dense"
+                                       Disabled="@(_mltAudioCodec == "flac")">
+                                <MudSelectItem Value="@("128k")" T="string">128 kb/s</MudSelectItem>
+                                <MudSelectItem Value="@("192k")" T="string">192 kb/s</MudSelectItem>
+                                <MudSelectItem Value="@("256k")" T="string">256 kb/s</MudSelectItem>
+                                <MudSelectItem Value="@("320k")" T="string">320 kb/s</MudSelectItem>
+                                <MudSelectItem Value="@("384k")" T="string">384 kb/s</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                    </MudGrid>
+                </div>
             }
 
             @* Track Selection - Show for MLT source files only, when ShowTrackSelection is true *@
             @if (ShowTrackSelection && _isMltSource && _tracks.Any())
             {
                 <MudDivider />
-                <MudText Typo="Typo.subtitle2">Track Selection</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.Layers" Size="Size.Small" Color="Color.Tertiary" />
+                    <MudText Typo="Typo.subtitle1">Tracks</MudText>
+                </MudStack>
 
                 @if (_videoTracks.Any())
                 {
@@ -131,7 +187,10 @@
             @if (ShowRenderRange && _isMltSource && !string.IsNullOrEmpty(_renderRangeDescription))
             {
                 <MudDivider />
-                <MudText Typo="Typo.subtitle2">Render Range</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.ContentCut" Size="Size.Small" Color="Color.Info" />
+                    <MudText Typo="Typo.subtitle1">Render Range</MudText>
+                </MudStack>
 
                 @if (!_useCustomRange)
                 {
@@ -240,6 +299,22 @@
     private int _maxThreads = Environment.ProcessorCount;
     private string _mltPreset = "medium";
     private int _mltCrf = 23;
+    private string _mltVideoCodec = "libx264";
+    private string _mltAudioCodec = "aac";
+    private string _mltAudioBitrate = "128k";
+
+    private bool IsCpuCodec => _mltVideoCodec.StartsWith("libx");
+
+    private string QualityLabel => IsCpuCodec ? "CRF" : "CQ";
+
+    // Hardware encoders detected on this machine (NVENC/QSV/AMF), available ones first
+    private IEnumerable<HardwareEncoderInfo> HardwareEncoders =>
+        _hardware == null
+            ? []
+            : _hardware.SupportedEncoders.Values
+                .OrderByDescending(e => e.IsAvailable)
+                .ThenBy(e => e.VendorType)
+                .ThenBy(e => e.DisplayName);
 
     // Note: AI upscaling/interpolation (RIFE, Real-CUGAN, Real-ESRGAN) moved to CheapUpscaler
 
@@ -293,6 +368,10 @@
         _appSettings = await SettingsService.LoadSettingsAsync();
         _mltCrf = _appSettings.DefaultCrf;
         _mltPreset = _appSettings.DefaultPreset;
+        if (!string.IsNullOrEmpty(_appSettings.DefaultCodec))
+        {
+            _mltVideoCodec = _appSettings.DefaultCodec;
+        }
 
         // Set default output folder to user's Videos directory
         var videosFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
@@ -622,10 +701,9 @@
                 ThreadCount = _mltThreads,
                 Preset = _mltPreset,
                 Crf = _mltCrf,
-                VideoCodec = _appSettings?.DefaultCodec ?? "libx264",
-                AudioCodec = "aac",
-                AudioBitrate = "128k",
-                UseHardwareAcceleration = false // Always false for MLT
+                VideoCodec = _mltVideoCodec,
+                AudioCodec = _mltAudioCodec,
+                AudioBitrate = _mltAudioBitrate
             };
 
             // Store frame rate for timecode conversion

@@ -307,26 +307,46 @@ public class MeltRenderService
         // Consumer and output
         args.Add($"-consumer avformat:\"{outputPath}\"");
 
-        // Video codec - ALWAYS use CPU codec (libx264 or libx265)
+        // Video codec - CPU (libx264/libx265) or hardware (NVENC/QSV/AMF)
         args.Add($"vcodec={settings.VideoCodec}");
 
         // Audio codec
         args.Add($"acodec={settings.AudioCodec}");
 
-        // Quality settings (CRF for constant quality)
+        // Quality settings - each encoder family takes a different property
+        // (matches what Shotcut's export panel emits per encoder)
         if (settings.Crf.HasValue)
         {
-            args.Add($"crf={settings.Crf.Value}");
+            if (settings.VideoCodec.Contains("nvenc"))
+            {
+                args.Add("rc=vbr");
+                args.Add($"cq={settings.Crf.Value}");
+            }
+            else if (settings.VideoCodec.Contains("qsv"))
+            {
+                args.Add($"global_quality={settings.Crf.Value}");
+            }
+            else if (settings.VideoCodec.Contains("amf"))
+            {
+                args.Add("rc=cqp");
+                args.Add($"qp_i={settings.Crf.Value}");
+                args.Add($"qp_p={settings.Crf.Value}");
+            }
+            else
+            {
+                args.Add($"crf={settings.Crf.Value}");
+            }
         }
 
-        // Encoding preset (speed vs compression)
-        if (!string.IsNullOrEmpty(settings.Preset))
+        // Encoding preset only applies to the CPU x264/x265 encoders;
+        // hardware encoders use their own driver-managed presets
+        if (!string.IsNullOrEmpty(settings.Preset) && settings.VideoCodec.StartsWith("libx"))
         {
             args.Add($"preset={settings.Preset}");
         }
 
-        // Audio bitrate
-        if (!string.IsNullOrEmpty(settings.AudioBitrate))
+        // Audio bitrate (FLAC is lossless - bitrate does not apply)
+        if (!string.IsNullOrEmpty(settings.AudioBitrate) && settings.AudioCodec != "flac")
         {
             args.Add($"ab={settings.AudioBitrate}");
         }
