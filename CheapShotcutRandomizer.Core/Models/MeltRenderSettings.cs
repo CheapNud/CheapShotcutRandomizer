@@ -46,14 +46,3 @@ public class MeltRenderSettings
     /// </summary>
     public string AudioBitrate { get; set; } = "128k";
 }
-
-/// <summary>
-/// Progress information for melt rendering
-/// </summary>
-public class RenderProgress
-{
-    public int CurrentFrame { get; set; }
-    public int Percentage { get; set; }
-    public TimeSpan ElapsedTime { get; set; }
-    public TimeSpan EstimatedTimeRemaining { get; set; }
-}

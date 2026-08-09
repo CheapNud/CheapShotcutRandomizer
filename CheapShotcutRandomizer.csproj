@@ -40,16 +40,12 @@
     <PackageReference Include="CheapHelpers.EF" Version="3.7.0" />
     <PackageReference Include="CheapHelpers.Models" Version="3.7.0" />
     <PackageReference Include="CheapHelpers.Services" Version="3.7.0" />
-		<PackageReference Include="SharpCompress" Version="0.50.4" />
 
     <!-- CheapAvaloniaBlazor Package Reference -->
     <PackageReference Include="CheapAvaloniaBlazor" Version="3.2.0" />
 
     <!-- MudBlazor for UI components -->
     <PackageReference Include="MudBlazor" Version="9.8.0" />
-
-    <!-- FFmpeg wrapper for video processing -->
-    <PackageReference Include="FFMpegCore" Version="5.4.0" />
 
     <!-- Hardware detection (WMI) -->
     <PackageReference Include="System.Management" Version="10.0.10" />
@@ -61,9 +57,6 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-
-    <!-- Polly for retry logic -->
-    <PackageReference Include="Polly" Version="8.7.0" />
   </ItemGroup>
 
   <ItemGroup>

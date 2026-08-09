@@ -96,12 +96,6 @@ public class RenderJob
     public MeltRenderSettings? MeltSettings { get; set; }
 
     /// <summary>
-    /// FFmpeg-specific render settings (nullable)
-    /// NOT MAPPED to database - use RenderSettings JSON property instead
-    /// </summary>
-    public FFmpegRenderSettings? FFmpegSettings { get; set; }
-
-    /// <summary>
     /// Number of times this job has been retried
     /// </summary>
     public int RetryCount { get; set; }

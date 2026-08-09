@@ -6,9 +6,6 @@ using CheapShotcutRandomizer.Models;
 using CheapShotcutRandomizer.Core.Models;
 using CheapShotcutRandomizer.Data;
 using CheapShotcutRandomizer.Data.Repositories;
-using Polly;
-using Polly.Retry;
-using CheapShotcutRandomizer.Services.Utilities;
 using CheapHelpers.MediaProcessing.Services;
 
 namespace CheapShotcutRandomizer.Services.Queue;
@@ -24,7 +21,6 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
     private readonly int _maxConcurrentRenders;
     private readonly Dictionary<Guid, CancellationTokenSource> _runningJobs = new();
     private readonly object _runningJobsLock = new();
-    private readonly ResiliencePipeline _retryPipeline;
 
     // Queue control - starts paused by default to prevent immediate encoding
     private volatile bool _queuePaused = true;
@@ -46,17 +42,6 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
         _taskQueue = taskQueue;
         _maxConcurrentRenders = maxConcurrentRenders;
         _concurrencyLimit = new SemaphoreSlim(_maxConcurrentRenders, _maxConcurrentRenders);
-
-        // Configure retry policy with exponential backoff
-        _retryPipeline = new ResiliencePipelineBuilder()
-            .AddRetry(new RetryStrategyOptions
-            {
-                MaxRetryAttempts = 1, // We handle retries manually in ProcessJobAsync, set to 1 to satisfy Polly validation
-                ShouldHandle = new PredicateBuilder().Handle<Exception>(),
-                BackoffType = DelayBackoffType.Exponential,
-                UseJitter = true
-            })
-            .Build();
 
         Debug.WriteLine($"RenderQueueService initialized with max {_maxConcurrentRenders} concurrent renders");
     }
@@ -195,11 +180,6 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
     }
 
     public async Task<Guid> AddJobAsync(RenderJob renderJob)
-    {
-        return await EnqueueJobAsync(renderJob);
-    }
-
-    public async Task<Guid> EnqueueJobAsync(RenderJob renderJob)
     {
         // Add job to database
         using var scope = _serviceProvider.CreateScope();

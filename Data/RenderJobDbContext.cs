@@ -37,7 +37,6 @@ public class RenderJobDbContext(DbContextOptions<RenderJobDbContext> options) : 
 
             // Ignore complex properties (not stored in database)
             entity.Ignore(e => e.MeltSettings);
-            entity.Ignore(e => e.FFmpegSettings);
 
             // Unique index on JobId for fast lookups
             entity.HasIndex(e => e.JobId)
