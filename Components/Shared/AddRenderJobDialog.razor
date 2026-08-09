@@ -206,6 +206,13 @@
     [Parameter]
     public EventCallback<bool> IsVisibleChanged { get; set; }
 
+    // Set when hosted via DialogService (Render Queue page); null when embedded inline (Home page).
+    // Without it the service-hosted dialog has no way to close itself.
+    [CascadingParameter]
+    private IMudDialogInstance? MudDialogInstance { get; set; }
+
+    private bool _wasVisible;
+
     [Parameter]
     public EventCallback<RenderJob> OnJobAdded { get; set; }
 
@@ -294,6 +301,16 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        // Reset per-job state when the embedded dialog is re-opened - otherwise the
+        // previous job's custom render range silently applies to the next job
+        if (IsVisible && !_wasVisible)
+        {
+            _useCustomRange = false;
+            _customInPoint = null;
+            _customOutPoint = null;
+        }
+        _wasVisible = IsVisible;
+
         // If a source path is pre-populated and different from current, load it automatically
         if (!string.IsNullOrEmpty(PrePopulatedSourcePath) && _sourcePath != PrePopulatedSourcePath)
         {
@@ -664,12 +681,14 @@
 
     private async Task Cancel()
     {
-        await CloseDialog();
+        await IsVisibleChanged.InvokeAsync(false);
+        MudDialogInstance?.Cancel();
     }
 
     private async Task CloseDialog()
     {
         await IsVisibleChanged.InvokeAsync(false);
+        MudDialogInstance?.Close();
     }
 
     private async Task OnDialogVisibleChanged(bool visible)

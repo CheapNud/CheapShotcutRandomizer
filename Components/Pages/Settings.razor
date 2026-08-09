@@ -89,7 +89,9 @@ else
                             @if (context.CustomPathProperty != null)
                             {
                                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                    <MudTextField @bind-Value="@context.CustomPathValue"
+                                    <MudTextField T="string"
+                                                 Value="@context.CustomPathValue"
+                                                 ValueChanged="@((string newPath) => SetDependencyPath(context, newPath))"
                                                  Variant="Variant.Text"
                                                  Margin="Margin.Dense"
                                                  Placeholder="Auto-detect"
@@ -608,6 +610,21 @@ else
         if (_settings?.VerboseLogging == true)
         {
             System.Diagnostics.Debug.WriteLine($"[Settings Page] {message}");
+        }
+    }
+
+    private void SetDependencyPath(DependencyStatusItem dependency, string? newPath)
+    {
+        if (_settings == null) return;
+
+        // Write through to settings - the grid rows are rebuilt DTOs, so a plain
+        // bind on CustomPathValue silently discarded whatever the user typed
+        dependency.CustomPathValue = newPath;
+        switch (dependency.CustomPathProperty)
+        {
+            case "FFmpegPath": _settings.FFmpegPath = newPath; break;
+            case "FFprobePath": _settings.FFprobePath = newPath; break;
+            case "MeltPath": _settings.MeltPath = newPath; break;
         }
     }
 

@@ -24,7 +24,6 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
 
     // Queue control - starts paused by default to prevent immediate encoding
     private volatile bool _queuePaused = true;
-    private readonly SemaphoreSlim _pauseSemaphore = new(0); // Starts with 0 available slots (paused)
 
     public event EventHandler<RenderProgressEventArgs>? ProgressChanged;
     public event EventHandler<RenderProgressEventArgs>? StatusChanged;
@@ -59,18 +58,21 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
             try
             {
                 // If queue is paused, wait for it to be resumed
-                if (_queuePaused)
+                // ponytail: simple poll gate — the old semaphore leaked permits on Start/Stop/Start
+                while (_queuePaused)
                 {
-                    Debug.WriteLine("Queue is paused. Waiting for resume signal...");
-                    await _pauseSemaphore.WaitAsync(stoppingToken);
-
-                    // Double-check we weren't stopped while waiting
-                    if (stoppingToken.IsCancellationRequested)
-                        break;
+                    await Task.Delay(250, stoppingToken);
                 }
 
                 // Dequeue the next work item
                 var workItem = await _taskQueue.DequeueAsync(stoppingToken);
+
+                // Re-check: Pause may have been clicked while we were blocked in DequeueAsync
+                if (_queuePaused)
+                {
+                    await _taskQueue.QueueBackgroundWorkItemAsync(workItem);
+                    continue;
+                }
 
                 // Wait for available slot (semaphore controls concurrency)
                 await _concurrencyLimit.WaitAsync(stoppingToken);
@@ -396,7 +398,6 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
 
         Debug.WriteLine("Starting render queue...");
         _queuePaused = false;
-        _pauseSemaphore.Release(); // Signal the processing loop to continue
         QueueStatusChanged?.Invoke(this, false); // false = not paused = running
         Debug.WriteLine("Render queue started");
     }
@@ -464,27 +465,26 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
                 return;
             }
 
-            // Skip if not pending
-            if (renderJob.Status != RenderJobStatus.Pending)
-            {
-                Debug.WriteLine($"Job {jobId} is not pending (status: {renderJob.Status})");
-                return;
-            }
-
-            // Create cancellation token for this job
+            // Register the CTS before claiming so a cancel arriving mid-claim always has something to cancel
             jobCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
             lock (_runningJobsLock)
             {
                 _runningJobs[jobId] = jobCts;
             }
 
-            // Update status to running
+            // Atomic Pending -> Running claim; loses cleanly to concurrent cancels and stale work items
+            var claimed = await repository.TryClaimJobAsync(jobId, Environment.ProcessId, Environment.MachineName);
+            if (!claimed)
+            {
+                Debug.WriteLine($"Job {jobId} is not pending (status: {renderJob.Status}) - skipping");
+                return;
+            }
+
+            // Keep the local entity in sync so the completion update doesn't clobber the claim
             renderJob.Status = RenderJobStatus.Running;
             renderJob.StartedAt = DateTime.UtcNow;
             renderJob.ProcessId = Environment.ProcessId;
             renderJob.MachineName = Environment.MachineName;
-
-            await repository.UpdateAsync(renderJob);
 
             FireStatusChanged(jobId, RenderJobStatus.Running, 0, 0);
 
@@ -721,6 +721,28 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
         catch (Exception ex)
         {
             Debug.WriteLine($"Error during crash recovery: {ex.Message}");
+        }
+
+        // Re-enqueue Pending jobs: after a restart no work item exists for them,
+        // so without this they'd sit as Pending in the UI forever
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IRenderJobRepository>();
+
+            var pendingJobs = await repository.GetByStatusAsync(RenderJobStatus.Pending);
+            foreach (var pendingJob in pendingJobs)
+            {
+                await _taskQueue.QueueBackgroundWorkItemAsync(async ct =>
+                {
+                    await ProcessJobAsync(pendingJob.JobId, ct);
+                });
+                Debug.WriteLine($"Re-enqueued pending job {pendingJob.JobId} after restart");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error re-enqueueing pending jobs: {ex.Message}");
         }
     }
 

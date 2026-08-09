@@ -47,9 +47,26 @@ class Program
         builder.Services.AddScoped<MeltRenderService>();
         builder.Services.AddSingleton<HardwareDetectionService>();
 
-        // Database for render queue
+        // Database for render queue - in LocalAppData beside settings.json, so it doesn't
+        // depend on the working directory (and works under a Program Files install)
+        var dbFolder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CheapShotcutRandomizer");
+        Directory.CreateDirectory(dbFolder);
+        var dbPath = Path.Combine(dbFolder, "renderjobs.db");
+
+        // One-time migration from the old working-directory-relative location
+        foreach (var dbFileSuffix in new[] { "", "-wal", "-shm" })
+        {
+            var legacyFile = "renderjobs.db" + dbFileSuffix;
+            if (File.Exists(legacyFile) && !File.Exists(dbPath + dbFileSuffix))
+            {
+                File.Move(legacyFile, dbPath + dbFileSuffix);
+            }
+        }
+
         builder.Services.AddDbContext<RenderJobDbContext>(options =>
-            options.UseSqlite("Data Source=renderjobs.db"));
+            options.UseSqlite($"Data Source={dbPath}"));
 
         // Repositories
         builder.Services.AddScoped<IRenderJobRepository, RenderJobRepository>();
@@ -69,11 +86,12 @@ class Program
         // Register as both IRenderQueueService and IHostedService
         builder.Services.AddSingleton<IRenderQueueService>(sp =>
             sp.GetRequiredService<RenderQueueService>());
+
+        // Hosted services start in registration order: the database must exist
+        // before the queue's crash recovery queries it
+        builder.Services.AddHostedService<DatabaseInitializationService>();
         builder.Services.AddHostedService(sp =>
             sp.GetRequiredService<RenderQueueService>());
-
-        // Initialization hosted services (run after app starts)
-        builder.Services.AddHostedService<DatabaseInitializationService>();
 
         // Configure graceful shutdown
         builder.Services.Configure<HostOptions>(options =>

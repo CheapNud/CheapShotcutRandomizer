@@ -483,18 +483,27 @@
                 return;
             }
 
+            // Generate on a fresh copy - mutating the shared project in place made
+            // every repeat click stack another generated playlist onto the timeline
+            var projectCopy = await ShotcutSvc.LoadProjectAsync(ProjectState.CurrentProjectPath);
+            if (projectCopy == null)
+            {
+                Snackbar.Add("Failed to load project copy", Severity.Error);
+                return;
+            }
+
             var sourcePlaylists = _selectedPlaylists
                 .Select(idx => (idx, _targetSeconds.GetValueOrDefault(idx, 0)))
                 .ToList();
 
             var (newPlaylist, _) = ShotcutSvc.GenerateRandomPlaylist(
-                ProjectState.CurrentProject,
+                projectCopy,
                 sourcePlaylists,
                 _durationWeight,
                 _numberOfVideosWeight
             );
 
-            var newPath = await ShotcutSvc.SaveProjectAsync(ProjectState.CurrentProject, ProjectState.CurrentProjectPath);
+            var newPath = await ShotcutSvc.SaveProjectAsync(projectCopy, ProjectState.CurrentProjectPath);
 
             Snackbar.Add($"Generated playlist with {newPlaylist.Entry.Count} clips. Saved to: {Path.GetFileName(newPath)}", Severity.Success);
         }

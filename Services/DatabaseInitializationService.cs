@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
@@ -39,7 +40,7 @@ public class DatabaseInitializationService : IHostedService
 
                 Debug.WriteLine("Database schema is up to date");
             }
-            catch (Exception ex)
+            catch (SqliteException ex) when (ex.SqliteErrorCode == 1) // SQLITE_ERROR: no such table/column = schema mismatch
             {
                 Debug.WriteLine($"Database schema outdated: {ex.Message}");
                 Debug.WriteLine("Recreating database with new schema...");
@@ -50,6 +51,8 @@ public class DatabaseInitializationService : IHostedService
 
                 Debug.WriteLine("Database recreated successfully");
             }
+            // Anything else (locked DB, IO error, second instance) propagates —
+            // a transient failure must never wipe the job history
         }
         else
         {

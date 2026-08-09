@@ -13,7 +13,7 @@ namespace CheapShotcutRandomizer.Services;
 /// <param name="NumberOfVideosWeight">This adds a slight bias toward maximizing the number of videos included in the final selection. A value between 0.0 and 1.0 is usually reasonable. A higher weight(e.g., 0.5 or 0.8) may work well in scenarios where you have many short videos and want to prioritize their inclusion.</param>
 public class SimulatedAnnealingVideoSelector(int TargetDuration = 3600, double DurationWeight = 0.5, double NumberOfVideosWeight = 0.5)
 {
-        private static readonly Random rand = new();
+        private static Random rand => Random.Shared;
         //Set the starting temperature high to allow more freedom in early iterations.
         private const double InitialTemperature = 10000.0;
         //Controls how quickly the algorithm cools down. A slower cooling rate allows more exploration.
@@ -73,6 +73,10 @@ public class SimulatedAnnealingVideoSelector(int TargetDuration = 3600, double D
         // Weighted score using exponential scaling with capping and considering the number of videos
         private double GetWeightedScore(List<Entry> videos)
         {
+            // An empty selection scores 0 (and would otherwise divide by zero below)
+            if (videos.Count == 0)
+                return 0;
+
             // Define a cap to prevent overflow based on the number of videos
             long maxValue = long.MaxValue / videos.Count;
 
@@ -100,10 +104,9 @@ public class SimulatedAnnealingVideoSelector(int TargetDuration = 3600, double D
                     selectedVideos.Add(video);
                     totalDuration += video.Duration;
                 }
-                else
-                {
-                    break;
-                }
+                // Keep trying shorter clips instead of giving up on the first one that
+                // doesn't fit - breaking here returned an empty selection whenever the
+                // first shuffled clip exceeded the target duration
             }
 
             return selectedVideos;
@@ -113,6 +116,11 @@ public class SimulatedAnnealingVideoSelector(int TargetDuration = 3600, double D
         {
             // Make a small change to the current solution (swap one video)
             List<Entry> newSolution = new(currentSolution);
+
+            // Nothing to swap out of an empty solution, and a solution already holding
+            // every video would make the replacement search below spin forever
+            if (newSolution.Count == 0 || newSolution.Count >= videoList.Count)
+                return newSolution;
 
             // Choose a video to replace
             int indexToRemove = rand.Next(newSolution.Count);
