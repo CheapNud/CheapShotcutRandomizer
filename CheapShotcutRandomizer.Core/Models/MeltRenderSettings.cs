@@ -19,8 +19,9 @@ public class MeltRenderSettings
     public int ThreadCount { get; set; } = 0;
 
     /// <summary>
-    /// Video codec: "libx264" (H.264) or "libx265" (H.265/HEVC)
-    /// NEVER use "h264_nvenc" or "hevc_nvenc" with melt
+    /// Video codec: CPU ("libx264", "libx265") or hardware
+    /// ("h264_nvenc", "hevc_nvenc", "h264_qsv", "hevc_qsv", "h264_amf", "hevc_amf").
+    /// Hardware encoders are faster but compress less efficiently than x264/x265.
     /// </summary>
     public string VideoCodec { get; set; } = "libx264";
 
@@ -36,7 +37,8 @@ public class MeltRenderSettings
     public string Preset { get; set; } = "medium";
 
     /// <summary>
-    /// Constant Rate Factor: 0-51 (lower = better quality)
+    /// Quality: 0-51, lower = better. Applied as CRF for x264/x265,
+    /// CQ (quality-based VBR) for NVENC, global_quality for QSV, CQP for AMF.
     /// 18 = visually lossless, 23 = default, 28 = lower quality
     /// </summary>
     public int? Crf { get; set; } = 23;
