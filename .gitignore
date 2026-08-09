@@ -372,3 +372,4 @@ FodyWeavers.xsd
 .claude/
 CLAUDE.md
 /wwwroot/cheap-blazor-interop.js
+deploy/out/

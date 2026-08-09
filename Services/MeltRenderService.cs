@@ -42,7 +42,7 @@ public class MeltRenderService
         string mltFilePath,
         string outputPath,
         MeltRenderSettings settings,
-        IProgress<RenderProgress> progress = null,
+        IProgress<RenderProgress>? progress = null,
         CancellationToken cancellationToken = default,
         int? inPoint = null,
         int? outPoint = null,

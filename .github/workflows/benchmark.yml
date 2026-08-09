@@ -38,11 +38,11 @@ jobs:
 
     - name: Restore dependencies
       working-directory: repo
-      run: dotnet restore CheapShotcutRandomizer.sln
+      run: dotnet restore CheapShotcutRandomizer.slnx
 
     - name: Build Release
       working-directory: repo
-      run: dotnet build CheapShotcutRandomizer.sln --configuration Release --no-restore
+      run: dotnet build CheapShotcutRandomizer.slnx --configuration Release --no-restore
 
     - name: Check for benchmark project
       id: check

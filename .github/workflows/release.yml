@@ -57,7 +57,7 @@ jobs:
 
     - name: Restore dependencies
       working-directory: repo
-      run: dotnet restore CheapShotcutRandomizer.sln
+      run: dotnet restore CheapShotcutRandomizer.slnx
 
     - name: Build Release (Self-Contained)
       working-directory: repo

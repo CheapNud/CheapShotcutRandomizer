@@ -14,6 +14,8 @@ jobs:
   coverage:
     name: Generate Coverage Report
     runs-on: windows-latest
+    permissions:
+      pull-requests: write
 
     steps:
     - name: Checkout code
@@ -37,11 +39,11 @@ jobs:
 
     - name: Restore dependencies
       working-directory: repo
-      run: dotnet restore CheapShotcutRandomizer.sln
+      run: dotnet restore CheapShotcutRandomizer.slnx
 
     - name: Build solution
       working-directory: repo
-      run: dotnet build CheapShotcutRandomizer.sln --configuration Debug --no-restore
+      run: dotnet build CheapShotcutRandomizer.slnx --configuration Debug --no-restore
 
     - name: Run tests with coverage
       working-directory: repo
