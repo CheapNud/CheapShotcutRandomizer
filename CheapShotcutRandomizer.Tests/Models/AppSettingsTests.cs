@@ -28,7 +28,6 @@ public class AppSettingsTests
         settings.MeltPath.Should().Be("melt");
 
         // Render Default Settings
-        settings.DefaultQuality.Should().Be("High");
         settings.DefaultCodec.Should().Be("libx264");
         settings.DefaultCrf.Should().Be(23);
         settings.DefaultPreset.Should().Be("medium");
@@ -88,26 +87,6 @@ public class AppSettingsTests
         settings.FFmpegPath.Should().Be(@"C:\CustomPath\ffmpeg.exe");
         settings.FFprobePath.Should().Be(@"C:\CustomPath\ffprobe.exe");
         settings.MeltPath.Should().Be(@"C:\Shotcut\melt.exe");
-    }
-
-    [Fact]
-    public void AppSettings_Supports_All_Quality_Presets()
-    {
-        // Arrange
-        var settings = new AppSettings();
-
-        // Act & Assert - Valid quality presets
-        settings.DefaultQuality = "Low";
-        settings.DefaultQuality.Should().Be("Low");
-
-        settings.DefaultQuality = "Medium";
-        settings.DefaultQuality.Should().Be("Medium");
-
-        settings.DefaultQuality = "High";
-        settings.DefaultQuality.Should().Be("High");
-
-        settings.DefaultQuality = "Ultra";
-        settings.DefaultQuality.Should().Be("Ultra");
     }
 
     [Fact]

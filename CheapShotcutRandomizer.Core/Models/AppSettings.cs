@@ -18,7 +18,6 @@ public class AppSettings
     public string MeltPath { get; set; } = "melt";
 
     // Render Default Settings
-    public string DefaultQuality { get; set; } = "High";
     public string DefaultCodec { get; set; } = "libx264";
     public int DefaultCrf { get; set; } = 23;
     public string DefaultPreset { get; set; } = "medium";

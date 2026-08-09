@@ -234,7 +234,6 @@ public class SettingsServiceTests : IDisposable
         settings.MaxConcurrentRenders.Should().Be(1);
         settings.AutoStartQueue.Should().BeFalse();
         settings.ShowNotificationsOnComplete.Should().BeTrue();
-        settings.DefaultQuality.Should().Be("High");
         settings.DefaultCodec.Should().Be("libx264");
         settings.DefaultCrf.Should().Be(23);
         settings.DefaultPreset.Should().Be("medium");

@@ -1,17 +1,16 @@
-@page "/"
+@page "/randomizer"
 @using CheapAvaloniaBlazor.Services
 @using CheapShotcutRandomizer.Components.Shared
 @using CheapShotcutRandomizer.Services.Queue
 @inject ShotcutService ShotcutSvc
-@inject FileSearchService FileSearchSvc
 @inject ProjectStateService ProjectState
 @inject IDesktopInteropService Desktop
 @inject ISnackbar Snackbar
-@inject IRenderQueueService QueueService
+@inject CheapShotcutRandomizer.Services.RenderJobDraftService Draft
 @inject NavigationManager NavigationManager
 @implements IDisposable
 
-<PageTitle>Shotcut Randomizer</PageTitle>
+<PageTitle>Randomizer - Cheap Shotcut Randomizer</PageTitle>
 
 <MudPaper Class="pa-4 mb-4">
     <MudStack Spacing="3">
@@ -201,121 +200,7 @@
         </MudStack>
     </MudPaper>
 
-    <MudPaper Class="pa-4">
-        <MudText Typo="Typo.h5" Class="mb-3">Find File in Tracks</MudText>
-
-        <MudStack Spacing="2">
-            <MudTextField @bind-Value="_searchQuery"
-                         Label="Search by filename (partial match)"
-                         Placeholder="Enter part of filename..."
-                         Immediate="true"
-                         DebounceInterval="500"
-                         OnDebounceIntervalElapsed="@SearchFiles"
-                         Adornment="Adornment.End"
-                         AdornmentIcon="@Icons.Material.Filled.Clear"
-                         OnAdornmentClick="@ClearSearch"
-                         @onkeydown="@OnSearchKeyDown" />
-
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                @if (_allFiles.Count > 0)
-                {
-                    <MudCheckBox @bind-Value="_showOnlyDuplicates"
-                                 Label="Show only duplicates"
-                                 Color="Color.Primary"
-                                 Dense="true" />
-                }
-            </MudStack>
-
-            @if (_searchResults.Count > 0)
-            {
-                <MudText Typo="Typo.subtitle2" Class="mt-2">Found @_searchResults.Count occurrence(s):</MudText>
-                <MudTable T="FileSearchResult" Items="@_searchResults" Dense="true" Hover="true">
-                    <HeaderContent>
-                        <MudTh>Filename</MudTh>
-                        <MudTh>Playlist</MudTh>
-                        <MudTh>Position</MudTh>
-                        <MudTh>Timeline</MudTh>
-                        <MudTh>In/Out</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Filename">@context.DisplayName</MudTd>
-                        <MudTd DataLabel="Playlist">[@context.PlaylistIndex] @context.PlaylistName</MudTd>
-                        <MudTd DataLabel="Position">@context.EntryIndex</MudTd>
-                        <MudTd DataLabel="Timeline">@context.TimelineDisplay</MudTd>
-                        <MudTd DataLabel="In/Out">@context.EntryInPoint → @context.EntryOutPoint</MudTd>
-                    </RowTemplate>
-                    <PagerContent>
-                        <MudTablePager PageSizeOptions="[10, 25, 50, 100]" />
-                    </PagerContent>
-                </MudTable>
-            }
-            else if (_searchPerformed)
-            {
-                <MudAlert Severity="Severity.Info" Dense="true">No files found matching "@_searchQuery"</MudAlert>
-            }
-
-            @if (_allFiles.Count > 0)
-            {
-                var filesToDisplay = GetFilteredFiles();
-                var displayCount = filesToDisplay.Count();
-                var totalCount = _allFiles.Count;
-                var duplicateCount = _allFiles.Count(f => f.UsageCount > 1);
-
-                <MudText Typo="Typo.subtitle2" Class="mt-2">
-                    @if (_showOnlyDuplicates)
-                    {
-                        <text>Showing @duplicateCount duplicates of @totalCount total files</text>
-                    }
-                    else
-                    {
-                        <text>Showing @totalCount files (@duplicateCount duplicates)</text>
-                    }
-                </MudText>
-
-                @if (displayCount == 0)
-                {
-                    <MudAlert Severity="Severity.Info" Dense="true">No duplicate files found</MudAlert>
-                }
-                else
-                {
-                    <MudTable T="UniqueFileInfo" Items="@filesToDisplay" Dense="true" Hover="true">
-                        <HeaderContent>
-                            <MudTh>Filename</MudTh>
-                            <MudTh>Usage Count</MudTh>
-                            <MudTh>Actions</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Filename">@context.FileName</MudTd>
-                            <MudTd DataLabel="Usage Count">
-                                <MudChip T="string" Size="Size.Small" Color="@(context.UsageCount > 1 ? Color.Warning : Color.Info)">
-                                    @context.UsageCount
-                                </MudChip>
-                            </MudTd>
-                            <MudTd DataLabel="Actions">
-                                <MudTooltip Text="Search by this file">
-                                    <MudIconButton Icon="@Icons.Material.Filled.Search"
-                                                  Size="Size.Small"
-                                                  OnClick="@(() => SearchByProducerId(context.ProducerId))" />
-                                </MudTooltip>
-                            </MudTd>
-                        </RowTemplate>
-                        <PagerContent>
-                            <MudTablePager PageSizeOptions="[10, 25, 50, 100]" />
-                        </PagerContent>
-                    </MudTable>
-                }
-            }
-        </MudStack>
-    </MudPaper>
 }
-
-<AddRenderJobDialog @bind-IsVisible="_showAddRenderDialog"
-                    PrePopulatedSourcePath="@_dialogSourcePath"
-                    ShowTrackSelection="@_showTrackSelection"
-                    ShowRenderRange="@_showRenderRange"
-                    PreSelectedVideoTracks="@_preSelectedVideoTracks"
-                    PreSelectedAudioTracks="@_preSelectedAudioTracks"
-                    OnJobAdded="@HandleJobAdded" />
 
 @code {
     private double _durationWeight = 4.0;
@@ -323,21 +208,6 @@
     private bool _avoidConsecutiveSameSource = true;
     private HashSet<int> _selectedPlaylists = [];
     private Dictionary<int, int> _targetSeconds = new();
-
-    // Dialog state
-    private bool _showAddRenderDialog = false;
-    private string _dialogSourcePath = string.Empty;
-    private bool _showTrackSelection = false;
-    private bool _showRenderRange = true;
-    private string? _preSelectedVideoTracks = null;
-    private string? _preSelectedAudioTracks = null;
-
-    // File search
-    private string _searchQuery = string.Empty;
-    private List<FileSearchResult> _searchResults = [];
-    private List<UniqueFileInfo> _allFiles = [];
-    private bool _searchPerformed = false;
-    private bool _showOnlyDuplicates = false;
 
     private void TogglePlaylistSelection(int playlistIndex, bool selected)
     {
@@ -442,9 +312,6 @@
                 return;
             }
 
-            // Automatically load all files when project is loaded
-            _allFiles = FileSearchSvc.GetUniqueFiles(ProjectState.CurrentProject);
-
             Snackbar.Add("Project loaded successfully", Severity.Success);
         }
         catch (Exception ex)
@@ -511,62 +378,6 @@
         {
             Snackbar.Add($"Error generating: {ex.Message}", Severity.Error);
         }
-    }
-
-    private void OnSearchKeyDown(KeyboardEventArgs keyArgs)
-    {
-        if (keyArgs.Key == "Enter")
-            SearchFiles();
-    }
-
-    private void ClearSearch()
-    {
-        _searchQuery = string.Empty;
-        _searchResults = [];
-        _searchPerformed = false;
-    }
-
-    private void SearchFiles()
-    {
-        if (ProjectState.CurrentProject == null)
-        {
-            Snackbar.Add("Please load a project first", Severity.Warning);
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(_searchQuery))
-        {
-            ClearSearch();
-            return;
-        }
-
-        _searchResults = FileSearchSvc.SearchByPartialFilename(ProjectState.CurrentProject, _searchQuery);
-        _searchPerformed = true;
-
-        if (_searchResults.Count == 0)
-        {
-            Snackbar.Add($"No files found matching '{_searchQuery}'", Severity.Info);
-        }
-    }
-
-    private IEnumerable<UniqueFileInfo> GetFilteredFiles()
-    {
-        var filesToShow = _allFiles.AsEnumerable();
-
-        if (_showOnlyDuplicates)
-            filesToShow = filesToShow.Where(f => f.UsageCount > 1);
-
-        return filesToShow;
-    }
-
-    private void SearchByProducerId(string producerId)
-    {
-        if (ProjectState.CurrentProject == null)
-            return;
-
-        _searchResults = FileSearchSvc.SearchByProducerId(ProjectState.CurrentProject, producerId);
-        _searchPerformed = true;
-        _searchQuery = $"[Producer: {producerId}]";
     }
 
     /// <summary>
@@ -641,15 +452,14 @@
             // Determine if this is a video or audio track
             var hasVideo = playlist.Property?.Any(p => p.Name == "shotcut:video" && p.Text == "1") ?? false;
 
-            _dialogSourcePath = tempPath;
-            _showTrackSelection = false;
-            _showRenderRange = true;
-            _preSelectedVideoTracks = hasVideo ? trackIndex.ToString() : null;
-            _preSelectedAudioTracks = hasVideo ? null : trackIndex.ToString();
-            _showAddRenderDialog = true;
-            StateHasChanged();
+            // Hand off to the Add Render Job stepper with the shuffled track pre-selected
+            Draft.SourcePath = tempPath;
+            Draft.ShowTrackSelection = false;
+            Draft.ShowRenderRange = true;
+            Draft.PreSelectedVideoTracks = hasVideo ? trackIndex.ToString() : null;
+            Draft.PreSelectedAudioTracks = hasVideo ? null : trackIndex.ToString();
 
-            Snackbar.Add($"Shuffled playlist ready for rendering", Severity.Success);
+            NavigationManager.NavigateTo("/add-job");
         }
         catch (Exception ex)
         {
@@ -694,18 +504,15 @@
             var baseName = $"random_{newPlaylist.Name}".Replace(" ", "_");
             var tempPath = await SaveToSourceDirectoryAsync(projectCopy, baseName);
 
-            // Open render dialog with pre-populated source path
-            // For generated random: hide track selection UI, pre-select only the generated track
+            // Hand off to the Add Render Job stepper with the generated track pre-selected
             // Generated playlists are always video tracks (with audio)
-            _dialogSourcePath = tempPath;
-            _showTrackSelection = false;
-            _showRenderRange = false;
-            _preSelectedVideoTracks = trackIndex.ToString();
-            _preSelectedAudioTracks = null; // The video track includes audio
-            _showAddRenderDialog = true;
-            StateHasChanged();
+            Draft.SourcePath = tempPath;
+            Draft.ShowTrackSelection = false;
+            Draft.ShowRenderRange = false;
+            Draft.PreSelectedVideoTracks = trackIndex.ToString();
+            Draft.PreSelectedAudioTracks = null; // The video track includes audio
 
-            Snackbar.Add($"Random playlist with {newPlaylist.Entry.Count} clips ready for rendering", Severity.Success);
+            NavigationManager.NavigateTo("/add-job");
         }
         catch (Exception ex)
         {
@@ -717,41 +524,6 @@
     {
         // Subscribe to project changes to trigger re-render
         ProjectState.OnProjectChanged += StateHasChanged;
-
-        // Load files if project is already loaded
-        if (ProjectState.IsProjectLoaded)
-        {
-            _allFiles = FileSearchSvc.GetUniqueFiles(ProjectState.CurrentProject!);
-        }
-    }
-
-    private async Task HandleJobAdded(RenderJob job)
-    {
-        try
-        {
-            var jobId = await QueueService.AddJobAsync(job);
-            Snackbar.Add($"Added job to render queue: {Path.GetFileName(job.SourceVideoPath)}", Severity.Success);
-
-            // Notify about queue status if paused
-            if (QueueService.IsQueuePaused)
-            {
-                Snackbar.Add("Queue is paused - navigate to Render Queue to start processing", Severity.Info, config =>
-                {
-                    config.RequireInteraction = true;
-                    config.Action = "Go to Queue";
-                    config.ActionColor = Color.Primary;
-                    config.OnClick = snackbar =>
-                    {
-                        NavigationManager.NavigateTo("/render-queue");
-                        return Task.CompletedTask;
-                    };
-                });
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error adding job: {ex.Message}", Severity.Error);
-        }
     }
 
     public void Dispose()

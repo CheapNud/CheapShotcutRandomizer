@@ -1,3 +1,4 @@
+@page "/"
 @page "/render-queue"
 @using CheapShotcutRandomizer.Components.Shared
 @using CheapHelpers.MediaProcessing.Services
@@ -5,8 +6,12 @@
 @inject IRenderJobRepository Repository
 @inject HardwareDetectionService HardwareService
 @inject IDialogService DialogService
+@inject CheapShotcutRandomizer.Services.SettingsService SettingsService
+@inject NavigationManager Nav
 @inject ISnackbar Snackbar
 @implements IDisposable
+
+<PageTitle>Render Queue - Cheap Shotcut Randomizer</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <MudStack Spacing="3">
@@ -101,9 +106,9 @@
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.Add"
-                           OnClick="@OpenAddJobDialog"
+                           OnClick="@(() => Nav.NavigateTo("/add-job"))"
                            Disabled="@_isLoadingJobs">
-                    Add Job
+                    Add Files
                 </MudButton>
                 <MudButton Variant="Variant.Outlined"
                            Color="Color.Default"
@@ -335,6 +340,8 @@
     private DateTime _lastProgressUIUpdate = DateTime.MinValue;
     private int _totalJobCount = 0;
 
+    private bool _showCompletionNotifications = true;
+
     protected override async Task OnInitializedAsync()
     {
         // Subscribe to events for real-time updates
@@ -342,8 +349,11 @@
         QueueService.StatusChanged += OnStatusChanged;
         QueueService.QueueStatusChanged += OnQueueStatusChanged;
 
-        // Get initial queue status
+        // Get initial queue status before the first await so the initial render is correct
         _isQueuePaused = QueueService.IsQueuePaused;
+
+        var appSettings = await SettingsService.LoadSettingsAsync();
+        _showCompletionNotifications = appSettings.ShowNotificationsOnComplete;
         _queueStats = await QueueService.GetQueueStatisticsAsync();
 
         // Run hardware detection and job loading in parallel for better performance
@@ -469,7 +479,10 @@
             await LoadJobs();
             StateHasChanged();
 
-            // Show notification
+            // Show notification (respects the settings toggle)
+            if (!_showCompletionNotifications)
+                return;
+
             var message = e.Status switch
             {
                 RenderJobStatus.Completed => "Job completed successfully!",
@@ -488,64 +501,6 @@
         catch (Exception ex)
         {
             Debug.WriteLine($"RenderQueue status update failed: {ex.Message}");
-        }
-    }
-
-    private async Task OpenAddJobDialog()
-    {
-        var parameters = new DialogParameters<AddRenderJobDialog>
-        {
-            { x => x.OnJobAdded, EventCallback.Factory.Create<RenderJob>(this, HandleJobAdded) }
-        };
-
-        var options = new DialogOptions
-        {
-            MaxWidth = MaxWidth.Medium,
-            FullWidth = true,
-            CloseButton = true
-        };
-
-        var dialog = await DialogService.ShowAsync<AddRenderJobDialog>("Add Render Job", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled && result.Data is RenderJob job)
-        {
-            await HandleJobAdded(job);
-        }
-    }
-
-    private async Task HandleJobAdded(RenderJob renderJob)
-    {
-        try
-        {
-            var jobId = await QueueService.AddJobAsync(renderJob);
-            await LoadJobs();
-            StateHasChanged();
-
-            // Notify user about job addition and queue status
-            if (_isQueuePaused)
-            {
-                Snackbar.Add("Job added to queue successfully!", Severity.Success);
-                Snackbar.Add("Remember to start the queue to begin processing", Severity.Info, config =>
-                {
-                    config.RequireInteraction = true;
-                    config.Action = "Start Queue";
-                    config.ActionColor = Color.Success;
-                    config.OnClick = snackbar =>
-                    {
-                        StartQueue();
-                        return Task.CompletedTask;
-                    };
-                });
-            }
-            else
-            {
-                Snackbar.Add("Job added and will start processing soon", Severity.Success);
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error adding job: {ex.Message}", Severity.Error);
         }
     }
 
