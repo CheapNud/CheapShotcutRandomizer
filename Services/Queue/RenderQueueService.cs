@@ -49,6 +49,25 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
     {
         Debug.WriteLine("RenderQueueService starting... (Queue initially PAUSED)");
 
+        // Honor the Auto-start Render Queue setting (GetService: absent in unit tests)
+        try
+        {
+            using var startupScope = _serviceProvider.CreateScope();
+            var settingsService = startupScope.ServiceProvider.GetService<SettingsService>();
+            if (settingsService != null)
+            {
+                var appSettings = await settingsService.LoadSettingsAsync();
+                if (appSettings.AutoStartQueue)
+                {
+                    StartQueue();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Could not read AutoStartQueue setting: {ex.Message}");
+        }
+
         // Perform crash recovery on startup
         await RecoverCrashedJobsAsync();
 

@@ -1,0 +1,212 @@
+@page "/find-files"
+@inject FileSearchService FileSearchSvc
+@inject ProjectStateService ProjectState
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<PageTitle>Find Files - Cheap Shotcut Randomizer</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Find Files</MudText>
+
+@if (!ProjectState.IsProjectLoaded)
+{
+    <MudAlert Severity="Severity.Info">
+        No project loaded — open a project on the Randomizer page first.
+    </MudAlert>
+}
+else
+{
+    <MudPaper Class="pa-4">
+        <MudStack Spacing="2">
+            <MudTextField @bind-Value="_searchQuery"
+                         Label="Search by filename (partial match)"
+                         Placeholder="Enter part of filename..."
+                         Immediate="true"
+                         DebounceInterval="500"
+                         OnDebounceIntervalElapsed="@SearchFiles"
+                         Adornment="Adornment.End"
+                         AdornmentIcon="@Icons.Material.Filled.Clear"
+                         OnAdornmentClick="@ClearSearch"
+                         @onkeydown="@OnSearchKeyDown" />
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                @if (_allFiles.Count > 0)
+                {
+                    <MudCheckBox @bind-Value="_showOnlyDuplicates"
+                                 Label="Show only duplicates"
+                                 Color="Color.Primary"
+                                 Dense="true" />
+                }
+            </MudStack>
+
+            @if (_searchResults.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-2">Found @_searchResults.Count occurrence(s):</MudText>
+                <MudTable T="FileSearchResult" Items="@_searchResults" Dense="true" Hover="true">
+                    <HeaderContent>
+                        <MudTh>Filename</MudTh>
+                        <MudTh>Playlist</MudTh>
+                        <MudTh>Position</MudTh>
+                        <MudTh>Timeline</MudTh>
+                        <MudTh>In/Out</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Filename">@context.DisplayName</MudTd>
+                        <MudTd DataLabel="Playlist">[@context.PlaylistIndex] @context.PlaylistName</MudTd>
+                        <MudTd DataLabel="Position">@context.EntryIndex</MudTd>
+                        <MudTd DataLabel="Timeline">@context.TimelineDisplay</MudTd>
+                        <MudTd DataLabel="In/Out">@context.EntryInPoint → @context.EntryOutPoint</MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager PageSizeOptions="[10, 25, 50, 100]" />
+                    </PagerContent>
+                </MudTable>
+            }
+            else if (_searchPerformed)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">No files found matching "@_searchQuery"</MudAlert>
+            }
+
+            @if (_allFiles.Count > 0)
+            {
+                var filesToDisplay = GetFilteredFiles();
+                var displayCount = filesToDisplay.Count();
+                var totalCount = _allFiles.Count;
+                var duplicateCount = _allFiles.Count(f => f.UsageCount > 1);
+
+                <MudText Typo="Typo.subtitle2" Class="mt-2">
+                    @if (_showOnlyDuplicates)
+                    {
+                        <text>Showing @duplicateCount duplicates of @totalCount total files</text>
+                    }
+                    else
+                    {
+                        <text>Showing @totalCount files (@duplicateCount duplicates)</text>
+                    }
+                </MudText>
+
+                @if (displayCount == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">No duplicate files found</MudAlert>
+                }
+                else
+                {
+                    <MudTable T="UniqueFileInfo" Items="@filesToDisplay" Dense="true" Hover="true">
+                        <HeaderContent>
+                            <MudTh>Filename</MudTh>
+                            <MudTh>Usage Count</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Filename">@context.FileName</MudTd>
+                            <MudTd DataLabel="Usage Count">
+                                <MudChip T="string" Size="Size.Small" Color="@(context.UsageCount > 1 ? Color.Warning : Color.Info)">
+                                    @context.UsageCount
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudTooltip Text="Search by this file">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Search"
+                                                  Size="Size.Small"
+                                                  OnClick="@(() => SearchByProducerId(context.ProducerId))" />
+                                </MudTooltip>
+                            </MudTd>
+                        </RowTemplate>
+                        <PagerContent>
+                            <MudTablePager PageSizeOptions="[10, 25, 50, 100]" />
+                        </PagerContent>
+                    </MudTable>
+                }
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    private string _searchQuery = string.Empty;
+    private List<FileSearchResult> _searchResults = [];
+    private List<UniqueFileInfo> _allFiles = [];
+    private bool _searchPerformed = false;
+    private bool _showOnlyDuplicates = false;
+
+    protected override void OnInitialized()
+    {
+        ProjectState.OnProjectChanged += OnProjectChanged;
+
+        if (ProjectState.IsProjectLoaded)
+        {
+            _allFiles = FileSearchSvc.GetUniqueFiles(ProjectState.CurrentProject!);
+        }
+    }
+
+    private void OnProjectChanged()
+    {
+        _allFiles = ProjectState.IsProjectLoaded
+            ? FileSearchSvc.GetUniqueFiles(ProjectState.CurrentProject!)
+            : [];
+        _searchResults = [];
+        _searchPerformed = false;
+        StateHasChanged();
+    }
+
+    private void OnSearchKeyDown(KeyboardEventArgs keyArgs)
+    {
+        if (keyArgs.Key == "Enter")
+            SearchFiles();
+    }
+
+    private void ClearSearch()
+    {
+        _searchQuery = string.Empty;
+        _searchResults = [];
+        _searchPerformed = false;
+    }
+
+    private void SearchFiles()
+    {
+        if (ProjectState.CurrentProject == null)
+        {
+            Snackbar.Add("Please load a project first", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            ClearSearch();
+            return;
+        }
+
+        _searchResults = FileSearchSvc.SearchByPartialFilename(ProjectState.CurrentProject, _searchQuery);
+        _searchPerformed = true;
+
+        if (_searchResults.Count == 0)
+        {
+            Snackbar.Add($"No files found matching '{_searchQuery}'", Severity.Info);
+        }
+    }
+
+    private IEnumerable<UniqueFileInfo> GetFilteredFiles()
+    {
+        var filesToShow = _allFiles.AsEnumerable();
+
+        if (_showOnlyDuplicates)
+            filesToShow = filesToShow.Where(f => f.UsageCount > 1);
+
+        return filesToShow;
+    }
+
+    private void SearchByProducerId(string producerId)
+    {
+        if (ProjectState.CurrentProject == null)
+            return;
+
+        _searchResults = FileSearchSvc.SearchByProducerId(ProjectState.CurrentProject, producerId);
+        _searchPerformed = true;
+        _searchQuery = $"[Producer: {producerId}]";
+    }
+
+    public void Dispose()
+    {
+        ProjectState.OnProjectChanged -= OnProjectChanged;
+    }
+}

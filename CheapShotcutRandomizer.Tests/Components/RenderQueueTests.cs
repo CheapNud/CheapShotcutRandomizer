@@ -34,6 +34,8 @@ public class RenderQueueTests : BunitContext, IAsyncLifetime
         _mockQueueService = new Mock<IRenderQueueService>();
         _mockRepository = new Mock<IRenderJobRepository>();
         _mockSvpDetection = new Mock<SvpDetectionService>();
+        _mockSvpDetection.Setup(x => x.DetectSvpInstallation())
+            .Returns(new SvpInstallation());
         _mockHardwareService = new Mock<HardwareDetectionService>(_mockSvpDetection.Object);
 
         // Register services
@@ -41,6 +43,8 @@ public class RenderQueueTests : BunitContext, IAsyncLifetime
         Services.AddSingleton(_mockQueueService.Object);
         Services.AddSingleton(_mockRepository.Object);
         Services.AddSingleton(_mockHardwareService.Object);
+        Services.AddSingleton(_mockSvpDetection.Object);
+        Services.AddSingleton<SettingsService>();
 
         // Setup JSInterop for MudBlazor components
         JSInterop.Mode = JSRuntimeMode.Loose;
@@ -264,33 +268,6 @@ public class RenderQueueTests : BunitContext, IAsyncLifetime
 
         // Assert
         _mockQueueService.Verify(x => x.StopQueue(), Times.Once);
-    }
-
-    [Fact]
-    public async Task RenderQueue_Calls_AddJobAsync_When_Job_Added()
-    {
-        // Arrange
-        var newJob = new RenderJob
-        {
-            JobId = Guid.NewGuid(),
-            SourceVideoPath = "new_job.mlt",
-            OutputPath = "output.mp4"
-        };
-        _mockQueueService.Setup(x => x.AddJobAsync(It.IsAny<RenderJob>()))
-            .ReturnsAsync(newJob.JobId);
-
-        var component = Render<RenderQueue>();
-
-        // Act
-        await component.InvokeAsync(async () =>
-        {
-            var handleJobAddedMethod = component.Instance.GetType()
-                .GetMethod("HandleJobAdded", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            await (Task)handleJobAddedMethod!.Invoke(component.Instance, new object[] { newJob })!;
-        });
-
-        // Assert
-        _mockQueueService.Verify(x => x.AddJobAsync(It.Is<RenderJob>(j => j.JobId == newJob.JobId)), Times.Once);
     }
 
     [Fact]

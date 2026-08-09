@@ -270,15 +270,6 @@ else
                     <MudIcon Icon="@Icons.Material.Filled.VideoSettings" Class="mr-2" />
                     Default Render Settings
                 </MudText>
-                <MudSelect @bind-Value="_settings.DefaultQuality"
-                          Label="Quality"
-                          Variant="Variant.Outlined"
-                          Class="mb-3">
-                    <MudSelectItem Value="@("Low")">Low</MudSelectItem>
-                    <MudSelectItem Value="@("Medium")">Medium</MudSelectItem>
-                    <MudSelectItem Value="@("High")">High</MudSelectItem>
-                    <MudSelectItem Value="@("Ultra")">Ultra</MudSelectItem>
-                </MudSelect>
                 <MudSelect @bind-Value="_settings.DefaultCodec"
                           Label="Codec"
                           Variant="Variant.Outlined"

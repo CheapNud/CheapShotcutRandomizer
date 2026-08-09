@@ -39,6 +39,7 @@ class Program
         builder.Services.AddSingleton<ExecutableDetectionService>();
         builder.Services.AddSingleton<SettingsService>();
         builder.Services.AddSingleton<ProjectStateService>(); // Singleton to persist across page navigation
+        builder.Services.AddSingleton<RenderJobDraftService>(); // Carries drafts from Randomizer to the add-job stepper
         builder.Services.AddScoped<IXmlService, XmlService>();
         builder.Services.AddScoped<ShotcutService>();
         builder.Services.AddScoped<FileSearchService>();
@@ -84,13 +85,19 @@ class Program
         builder.Services.AddSingleton<IBackgroundTaskQueue>(_ =>
             new BackgroundTaskQueue(capacity: 100));
 
-        // Render queue service (singleton for background service)
+        // Render queue service (singleton for background service).
+        // Concurrency comes from settings; the factory runs during host start on a
+        // threadpool thread, so the blocking settings read cannot deadlock a UI context.
         builder.Services.AddSingleton<RenderQueueService>(serviceProvider =>
-            new RenderQueueService(
+        {
+            var appSettings = serviceProvider.GetRequiredService<SettingsService>()
+                .LoadSettingsAsync().GetAwaiter().GetResult();
+
+            return new RenderQueueService(
                 serviceProvider,
                 serviceProvider.GetRequiredService<IBackgroundTaskQueue>(),
-                maxConcurrentRenders: 1 // Configure: 1 for video rendering (CPU/GPU intensive)
-            ));
+                maxConcurrentRenders: Math.Max(1, appSettings.MaxConcurrentRenders));
+        });
 
         // Register as both IRenderQueueService and IHostedService
         builder.Services.AddSingleton<IRenderQueueService>(sp =>

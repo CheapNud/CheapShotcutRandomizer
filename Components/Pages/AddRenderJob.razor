@@ -1,0 +1,874 @@
+@page "/add-job"
+@using CheapShotcutRandomizer.Models
+@using CheapShotcutRandomizer.Services
+@using CheapAvaloniaBlazor.Services
+@using CheapHelpers.MediaProcessing.Services
+@inject IDesktopInteropService DesktopInterop
+@inject HardwareDetectionService HardwareService
+@inject ShotcutService ShotcutService
+@inject CheapShotcutRandomizer.Services.SettingsService SettingsService
+@inject RenderJobDraftService Draft
+@inject IRenderQueueService QueueService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Add Render Job - Cheap Shotcut Randomizer</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/"))" />
+    <MudText Typo="Typo.h4">Add Render Job</MudText>
+</MudStack>
+
+<MudPaper Class="pa-4">
+    <MudStepper OnPreviewInteraction="OnStepPreview" CompleteButtonIcon="@Icons.Material.Filled.AddToQueue">
+        <MudStep Title="Source" SecondaryText="Project & output">
+            <MudStack Spacing="3" Class="pa-2">
+                <MudTextField @bind-Value="_sourcePath"
+                              Label="Source (.mlt project)"
+                              Variant="Variant.Outlined"
+                              FullWidth="true"
+                              ReadOnly="true"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                              OnAdornmentClick="@BrowseSource" />
+                <MudTextField @bind-Value="_outputPath"
+                              Label="Output File"
+                              Variant="Variant.Outlined"
+                              FullWidth="true"
+                              ReadOnly="true"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                              OnAdornmentClick="@BrowseOutput" />
+
+                @if (_isMltSource && _loadedMltProject != null)
+                {
+                    <MudAlert Severity="Severity.Success" Dense="true">
+                        Project loaded: @_videoTracks.Count video / @_audioTracks.Count audio track(s)
+                        @if (!string.IsNullOrEmpty(_maxEndTimeDisplay))
+                        {
+                            <text> · duration @_maxEndTimeDisplay</text>
+                        }
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudStep>
+
+        <MudStep Title="Video" SecondaryText="Encoder & quality">
+            <MudGrid Spacing="2" Class="pa-2">
+                <MudItem xs="12" md="6">
+                    <MudSelect @bind-Value="_mltVideoCodec"
+                               Label="Encoder"
+                               Variant="Variant.Outlined"
+                               T="string"
+                               Margin="Margin.Dense">
+                        <MudSelectItem Value="@("libx264")" T="string">H.264 (libx264) — CPU</MudSelectItem>
+                        <MudSelectItem Value="@("libx265")" T="string">H.265/HEVC (libx265) — CPU</MudSelectItem>
+                        @foreach (var encoder in HardwareEncoders)
+                        {
+                            <MudSelectItem Value="@encoder.CodecName" T="string" Disabled="@(!encoder.IsAvailable)">
+                                @encoder.DisplayName — @encoder.VendorType@(encoder.IsAvailable ? $" (~{encoder.EstimatedSpeedupFactor:F1}x faster)" : " (not detected)")
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    @if (IsCpuCodec)
+                    {
+                        <MudSelect @bind-Value="_mltPreset"
+                                   Label="Encoding Preset"
+                                   Variant="Variant.Outlined"
+                                   T="string"
+                                   Margin="Margin.Dense">
+                            <MudSelectItem Value="@("ultrafast")" T="string">Ultra Fast</MudSelectItem>
+                            <MudSelectItem Value="@("superfast")" T="string">Super Fast</MudSelectItem>
+                            <MudSelectItem Value="@("veryfast")" T="string">Very Fast</MudSelectItem>
+                            <MudSelectItem Value="@("faster")" T="string">Faster</MudSelectItem>
+                            <MudSelectItem Value="@("fast")" T="string">Fast</MudSelectItem>
+                            <MudSelectItem Value="@("medium")" T="string">Medium (Recommended)</MudSelectItem>
+                            <MudSelectItem Value="@("slow")" T="string">Slow</MudSelectItem>
+                            <MudSelectItem Value="@("slower")" T="string">Slower</MudSelectItem>
+                        </MudSelect>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-4">
+                            Hardware encoder — quality-based VBR, preset managed by the driver
+                        </MudText>
+                    }
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudSelect @bind-Value="_mltResolution"
+                               Label="Resolution"
+                               Variant="Variant.Outlined"
+                               T="string"
+                               Margin="Margin.Dense">
+                        <MudSelectItem Value="@("")" T="string">Project default</MudSelectItem>
+                        <MudSelectItem Value="@("3840x2160")" T="string">3840 × 2160 (4K)</MudSelectItem>
+                        <MudSelectItem Value="@("2560x1440")" T="string">2560 × 1440 (QHD)</MudSelectItem>
+                        <MudSelectItem Value="@("1920x1080")" T="string">1920 × 1080 (FHD)</MudSelectItem>
+                        <MudSelectItem Value="@("1280x720")" T="string">1280 × 720 (HD)</MudSelectItem>
+                        <MudSelectItem Value="@("854x480")" T="string">854 × 480 (SD)</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudSelect @bind-Value="_mltAspect"
+                               Label="Aspect Ratio"
+                               Variant="Variant.Outlined"
+                               T="string"
+                               Margin="Margin.Dense"
+                               Disabled="@(string.IsNullOrEmpty(_mltResolution))">
+                        <MudSelectItem Value="@("auto")" T="string">Match resolution</MudSelectItem>
+                        <MudSelectItem Value="@("16:9")" T="string">16:9</MudSelectItem>
+                        <MudSelectItem Value="@("4:3")" T="string">4:3</MudSelectItem>
+                        <MudSelectItem Value="@("21:9")" T="string">21:9</MudSelectItem>
+                        <MudSelectItem Value="@("1:1")" T="string">1:1</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudSelect @bind-Value="_mltFps"
+                               Label="Frame Rate"
+                               Variant="Variant.Outlined"
+                               T="string"
+                               Margin="Margin.Dense">
+                        <MudSelectItem Value="@("")" T="string">Project default</MudSelectItem>
+                        <MudSelectItem Value="@("23.976")" T="string">23.976 fps</MudSelectItem>
+                        <MudSelectItem Value="@("24")" T="string">24 fps</MudSelectItem>
+                        <MudSelectItem Value="@("25")" T="string">25 fps</MudSelectItem>
+                        <MudSelectItem Value="@("29.97")" T="string">29.97 fps</MudSelectItem>
+                        <MudSelectItem Value="@("30")" T="string">30 fps</MudSelectItem>
+                        <MudSelectItem Value="@("50")" T="string">50 fps</MudSelectItem>
+                        <MudSelectItem Value="@("59.94")" T="string">59.94 fps</MudSelectItem>
+                        <MudSelectItem Value="@("60")" T="string">60 fps</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSlider @bind-Value="_mltCrf"
+                               Min="15"
+                               Max="32"
+                               Step="1"
+                               Color="Color.Primary">
+                        Quality (@QualityLabel): @_mltCrf — lower is better
+                    </MudSlider>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSlider @bind-Value="_mltThreads"
+                               Min="1"
+                               Max="@_maxThreads"
+                               Step="1"
+                               Color="Color.Primary">
+                        Processing Threads: @_mltThreads
+                    </MudSlider>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        MLT frame-processing pipeline threads (capped at 4 — more risks out-of-memory).
+                        The encoder itself always uses all CPU cores.
+                    </MudText>
+                </MudItem>
+            </MudGrid>
+        </MudStep>
+
+        <MudStep Title="Audio" SecondaryText="Codec & bitrate">
+            <MudGrid Spacing="2" Class="pa-2">
+                <MudItem xs="12" md="4">
+                    <MudSelect @bind-Value="_mltAudioCodec"
+                               @bind-Value:after="OnAudioCodecChanged"
+                               Label="Codec"
+                               Variant="Variant.Outlined"
+                               T="string"
+                               Margin="Margin.Dense">
+                        <MudSelectItem Value="@("aac")" T="string">AAC</MudSelectItem>
+                        <MudSelectItem Value="@("libmp3lame")" T="string">MP3</MudSelectItem>
+                        <MudSelectItem Value="@("ac3")" T="string">AC-3</MudSelectItem>
+                        <MudSelectItem Value="@("flac")" T="string">FLAC (lossless)</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudSelect @bind-Value="_mltAudioRateControl"
+                               Label="Rate Control"
+                               Variant="Variant.Outlined"
+                               T="string"
+                               Margin="Margin.Dense"
+                               Disabled="@(!SupportsAudioVbr)">
+                        <MudSelectItem Value="@("abr")" T="string">Average Bitrate</MudSelectItem>
+                        <MudSelectItem Value="@("vbr")" T="string">Quality-based VBR</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    @if (UseAudioVbr)
+                    {
+                        <MudNumericField @bind-Value="_mltAudioQuality"
+                                         Label="Quality"
+                                         Variant="Variant.Outlined"
+                                         T="double"
+                                         Margin="Margin.Dense"
+                                         Min="@(_mltAudioCodec == "aac" ? 0.1 : 0)"
+                                         Max="@(_mltAudioCodec == "aac" ? 2.0 : 9)"
+                                         Step="@(_mltAudioCodec == "aac" ? 0.1 : 1)"
+                                         HelperText="@AudioQualityHelper" />
+                    }
+                    else
+                    {
+                        <MudSelect @bind-Value="_mltAudioBitrate"
+                                   Label="Bitrate"
+                                   Variant="Variant.Outlined"
+                                   T="string"
+                                   Margin="Margin.Dense"
+                                   Disabled="@(_mltAudioCodec == "flac")">
+                            <MudSelectItem Value="@("128k")" T="string">128 kb/s</MudSelectItem>
+                            <MudSelectItem Value="@("192k")" T="string">192 kb/s</MudSelectItem>
+                            <MudSelectItem Value="@("256k")" T="string">256 kb/s</MudSelectItem>
+                            <MudSelectItem Value="@("320k")" T="string">320 kb/s</MudSelectItem>
+                            <MudSelectItem Value="@("384k")" T="string">384 kb/s</MudSelectItem>
+                        </MudSelect>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudStep>
+
+        <MudStep Title="Tracks & Range" SecondaryText="What to render">
+            <MudStack Spacing="3" Class="pa-2">
+                @if (Draft.ShowTrackSelection && _tracks.Any())
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Layers" Size="Size.Small" Color="Color.Tertiary" />
+                        <MudText Typo="Typo.subtitle1">Tracks</MudText>
+                    </MudStack>
+
+                    @if (_videoTracks.Any())
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Primary">Video Tracks</MudText>
+                        <MudStack Row="true" Spacing="2">
+                            @foreach (var track in _videoTracks)
+                            {
+                                <MudCheckBox @bind-Value="track.Selected"
+                                             Label="@track.DisplayName"
+                                             Color="Color.Primary"
+                                             T="bool" />
+                            }
+                        </MudStack>
+                    }
+
+                    @if (_audioTracks.Any())
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Audio Tracks</MudText>
+                        <MudStack Row="true" Spacing="2">
+                            @foreach (var track in _audioTracks)
+                            {
+                                <MudCheckBox @bind-Value="track.Selected"
+                                             Label="@track.DisplayName"
+                                             Color="Color.Secondary"
+                                             T="bool" />
+                            }
+                        </MudStack>
+                    }
+                    <MudDivider />
+                }
+
+                @if (Draft.ShowRenderRange && !string.IsNullOrEmpty(_renderRangeDescription))
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.ContentCut" Size="Size.Small" Color="Color.Info" />
+                        <MudText Typo="Typo.subtitle1">Render Range</MudText>
+                    </MudStack>
+
+                    @if (!_useCustomRange)
+                    {
+                        <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.ContentCut">
+                            @_renderRangeDescription
+                        </MudAlert>
+                    }
+
+                    <MudCheckBox @bind-Value="_useCustomRange" T="bool" Label="Override Markers (Custom Range)" Color="Color.Primary" />
+
+                    @if (_useCustomRange)
+                    {
+                        @if (!string.IsNullOrEmpty(_maxEndTimeDisplay))
+                        {
+                            <MudAlert Severity="Severity.Normal" Dense="true">
+                                Maximum end time: @_maxEndTimeDisplay
+                            </MudAlert>
+                        }
+
+                        <MudStack Row="true" Spacing="2">
+                            <MudTextField @bind-Value="_inPointTimecode"
+                                          Label="Start Time (HH:MM:SS.mmm)"
+                                          Variant="Variant.Outlined"
+                                          Placeholder="00:00:00.000"
+                                          HelperText="Format: HH:MM:SS or HH:MM:SS.mmm"
+                                          Error="@_inPointError"
+                                          ErrorText="@_inPointErrorText" />
+                            <MudTextField @bind-Value="_outPointTimecode"
+                                          Label="End Time (HH:MM:SS.mmm)"
+                                          Variant="Variant.Outlined"
+                                          Placeholder="00:10:30.000"
+                                          HelperText="Format: HH:MM:SS or HH:MM:SS.mmm"
+                                          Error="@_outPointError"
+                                          ErrorText="@_outPointErrorText" />
+                        </MudStack>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Leave empty to render from start or to end
+                        </MudText>
+                    }
+                }
+
+                @if ((!Draft.ShowTrackSelection || !_tracks.Any()) && (!Draft.ShowRenderRange || string.IsNullOrEmpty(_renderRangeDescription)))
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        Nothing to configure here — the whole timeline will be rendered.
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudStep>
+
+        <MudStep Title="Review" SecondaryText="Add to queue">
+            <MudStack Spacing="2" Class="pa-2">
+                <MudSimpleTable Dense="true" Bordered="false" Striped="true">
+                    <tbody>
+                        <tr><td><strong>Source</strong></td><td>@Path.GetFileName(_sourcePath)</td></tr>
+                        <tr><td><strong>Output</strong></td><td>@_outputPath</td></tr>
+                        <tr><td><strong>Video</strong></td><td>@_mltVideoCodec · @QualityLabel @_mltCrf@(IsCpuCodec ? $" · {_mltPreset}" : "")</td></tr>
+                        <tr><td><strong>Profile</strong></td><td>@(string.IsNullOrEmpty(_mltResolution) ? "Project default" : $"{_mltResolution} ({_mltAspect})") · @(string.IsNullOrEmpty(_mltFps) ? "project fps" : $"{_mltFps} fps")</td></tr>
+                        <tr><td><strong>Audio</strong></td><td>@_mltAudioCodec · @(UseAudioVbr ? $"VBR q{_mltAudioQuality}" : _mltAudioCodec == "flac" ? "lossless" : _mltAudioBitrate)</td></tr>
+                        <tr><td><strong>Tracks</strong></td><td>@_videoTracks.Count(t => t.Selected) video / @_audioTracks.Count(t => t.Selected) audio selected</td></tr>
+                        <tr><td><strong>Range</strong></td><td>@(_useCustomRange ? $"{(_inPointTimecode == "" ? "start" : _inPointTimecode)} → {(_outPointTimecode == "" ? "end" : _outPointTimecode)}" : string.IsNullOrEmpty(_renderRangeDescription) ? "Full timeline" : _renderRangeDescription)</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+
+                @if (!string.IsNullOrEmpty(_estimatedTime))
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">@_estimatedTime</MudAlert>
+                }
+
+                @if (!string.IsNullOrEmpty(_validationError))
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@_validationError</MudAlert>
+                }
+
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Complete adds this job to the render queue.
+                </MudText>
+            </MudStack>
+        </MudStep>
+    </MudStepper>
+</MudPaper>
+
+@code {
+    private string _sourcePath = string.Empty;
+    private string _outputPath = string.Empty;
+    private bool _isMltSource = false;
+
+    private int _mltThreads = Environment.ProcessorCount;
+    private int _maxThreads = Environment.ProcessorCount;
+    private string _mltPreset = "medium";
+    private int _mltCrf = 23;
+    private string _mltVideoCodec = "libx264";
+    private string _mltAudioCodec = "aac";
+    private string _mltAudioBitrate = "128k";
+    private string _mltAudioRateControl = "abr";
+    private double _mltAudioQuality = 1.2;
+    private string _mltResolution = "";
+    private string _mltAspect = "auto";
+    private string _mltFps = "";
+
+    private string _estimatedTime = string.Empty;
+    private string _validationError = string.Empty;
+    private HardwareCapabilities? _hardware;
+    private AppSettings? _appSettings;
+
+    // Track selection
+    private List<SelectableTrack> _tracks = [];
+    private List<SelectableTrack> _videoTracks = [];
+    private List<SelectableTrack> _audioTracks = [];
+
+    // Marker/range settings
+    private Mlt? _loadedMltProject;
+    private string _renderRangeDescription = string.Empty;
+    private bool _useCustomRange = false;
+    private int? _customInPoint;
+    private int? _customOutPoint;
+    private string _inPointTimecode = string.Empty;
+    private string _outPointTimecode = string.Empty;
+    private bool _inPointError = false;
+    private string _inPointErrorText = string.Empty;
+    private bool _outPointError = false;
+    private string _outPointErrorText = string.Empty;
+    private string _maxEndTimeDisplay = string.Empty;
+
+    // Fractional NTSC rates are rationals, not decimals - 29.97 is 30000/1001
+    private static readonly Dictionary<string, (int Num, int Den)> FrameRates = new()
+    {
+        ["23.976"] = (24000, 1001),
+        ["24"] = (24, 1),
+        ["25"] = (25, 1),
+        ["29.97"] = (30000, 1001),
+        ["30"] = (30, 1),
+        ["50"] = (50, 1),
+        ["59.94"] = (60000, 1001),
+        ["60"] = (60, 1)
+    };
+
+    private bool IsCpuCodec => _mltVideoCodec.StartsWith("libx");
+
+    private string QualityLabel => IsCpuCodec ? "CRF" : "CQ";
+
+    private bool SupportsAudioVbr => _mltAudioCodec is "aac" or "libmp3lame";
+
+    private bool UseAudioVbr => SupportsAudioVbr && _mltAudioRateControl == "vbr";
+
+    private string AudioQualityHelper => _mltAudioCodec == "aac"
+        ? "0.1–2, higher = better (~1.2 ≈ 128 kb/s)"
+        : "0–9, lower = better (2 ≈ 190 kb/s)";
+
+    // Hardware encoders detected on this machine (NVENC/QSV/AMF), available ones first
+    private IEnumerable<HardwareEncoderInfo> HardwareEncoders =>
+        _hardware == null
+            ? []
+            : _hardware.SupportedEncoders.Values
+                .OrderByDescending(e => e.IsAvailable)
+                .ThenBy(e => e.VendorType)
+                .ThenBy(e => e.DisplayName);
+
+    private class SelectableTrack
+    {
+        public TrackInfo Info { get; set; } = null!;
+        public bool Selected { get; set; } = true;
+        public string DisplayName => $"{Info.Name} ({Info.Type.ToUpper()[0]}{Info.Index})";
+    }
+
+    private void OnAudioCodecChanged()
+    {
+        // Codecs without a VBR mode fall back to average bitrate
+        if (!SupportsAudioVbr)
+        {
+            _mltAudioRateControl = "abr";
+        }
+
+        // The aq scale differs per codec - reset to a sensible default on switch
+        _mltAudioQuality = _mltAudioCodec == "aac" ? 1.2 : 2;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hardware = await HardwareService.DetectHardwareAsync();
+
+        // MLT frame-processing threads, capped at 4 like Shotcut (each holds full frame
+        // buffers); encoder threads are separate and always use all cores
+        _maxThreads = Math.Min(4, _hardware.CpuCoreCount);
+        _mltThreads = _maxThreads;
+
+        // Load app settings for defaults
+        _appSettings = await SettingsService.LoadSettingsAsync();
+        _mltCrf = _appSettings.DefaultCrf;
+        _mltPreset = _appSettings.DefaultPreset;
+        if (!string.IsNullOrEmpty(_appSettings.DefaultCodec))
+        {
+            _mltVideoCodec = _appSettings.DefaultCodec;
+        }
+
+        // Set default output folder to user's Videos directory
+        var videosFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+        _outputPath = Path.Combine(videosFolder, "output.mp4");
+
+        // A draft from the Randomizer flows pre-fills the source
+        if (!string.IsNullOrEmpty(Draft.SourcePath))
+        {
+            _sourcePath = Draft.SourcePath;
+            _isMltSource = _sourcePath.EndsWith(".mlt", StringComparison.OrdinalIgnoreCase);
+            UpdateOutputPath();
+
+            if (File.Exists(_sourcePath) && _isMltSource)
+            {
+                await LoadMltProjectDataAsync(_sourcePath);
+            }
+
+            UpdateEstimatedTime();
+        }
+    }
+
+    private async Task OnStepPreview(StepperInteractionEventArgs args)
+    {
+        // Leaving the Source step forward requires a source
+        if (args.StepIndex == 0 && args.Action == StepAction.Complete && !IsValid())
+        {
+            Snackbar.Add(_validationError, Severity.Warning);
+            args.Cancel = true;
+            return;
+        }
+
+        // Completing the final (Review) step adds the job
+        if (args.StepIndex == 4 && args.Action == StepAction.Complete)
+        {
+            args.Cancel = true; // we navigate away ourselves on success
+            await AddJobAsync();
+        }
+    }
+
+    private async Task BrowseSource()
+    {
+        // CheapShotcutRandomizer only renders MLT project files
+        var filters = new List<CheapAvaloniaBlazor.Models.FileFilter>
+        {
+            new() { Name = "MLT Project Files", Extensions = new[] { "*.mlt" } },
+            new() { Name = "All Files", Extensions = new[] { "*.*" } }
+        };
+
+        var options = new CheapAvaloniaBlazor.Models.FileDialogOptions
+        {
+            Title = "Select Source File",
+            Filters = filters
+        };
+
+        var selectedFile = await DesktopInterop.OpenFileDialogAsync(options);
+
+        if (!string.IsNullOrEmpty(selectedFile))
+        {
+            _sourcePath = selectedFile;
+            _isMltSource = _sourcePath.EndsWith(".mlt", StringComparison.OrdinalIgnoreCase);
+            UpdateOutputPath();
+
+            if (_isMltSource)
+            {
+                await LoadMltProjectDataAsync(_sourcePath);
+            }
+
+            UpdateEstimatedTime();
+        }
+    }
+
+    private async Task BrowseOutput()
+    {
+        var defaultFileName = !string.IsNullOrEmpty(_sourcePath)
+            ? Path.GetFileNameWithoutExtension(_sourcePath) + ".mp4"
+            : "output.mp4";
+
+        var filters = new List<CheapAvaloniaBlazor.Models.FileFilter>
+        {
+            new() { Name = "MP4 Files", Extensions = new[] { "*.mp4" } },
+            new() { Name = "MKV Files", Extensions = new[] { "*.mkv" } },
+            new() { Name = "All Files", Extensions = new[] { "*.*" } }
+        };
+
+        var options = new CheapAvaloniaBlazor.Models.FileDialogOptions
+        {
+            Title = "Save Output As",
+            DefaultFileName = defaultFileName,
+            Filters = filters
+        };
+
+        var selectedFile = await DesktopInterop.SaveFileDialogAsync(options);
+
+        if (!string.IsNullOrEmpty(selectedFile))
+        {
+            _outputPath = selectedFile;
+        }
+    }
+
+    private async Task LoadMltProjectDataAsync(string mltPath)
+    {
+        try
+        {
+            var project = await ShotcutService.LoadProjectAsync(mltPath);
+            if (project != null)
+            {
+                _loadedMltProject = project;
+
+                // Load tracks
+                var trackInfos = ShotcutService.GetTracks(project);
+
+                // Parse pre-selected tracks if the draft provides them
+                HashSet<int>? preSelectedVideoIndices = null;
+                if (!string.IsNullOrEmpty(Draft.PreSelectedVideoTracks))
+                {
+                    preSelectedVideoIndices = Draft.PreSelectedVideoTracks
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(int.Parse)
+                        .ToHashSet();
+                }
+
+                HashSet<int>? preSelectedAudioIndices = null;
+                if (!string.IsNullOrEmpty(Draft.PreSelectedAudioTracks))
+                {
+                    preSelectedAudioIndices = Draft.PreSelectedAudioTracks
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(int.Parse)
+                        .ToHashSet();
+                }
+
+                _tracks = trackInfos.Select(t => new SelectableTrack
+                {
+                    Info = t,
+                    // If pre-selection is provided, use that; otherwise select if not hidden
+                    Selected = t.Type == "video"
+                        ? (preSelectedVideoIndices?.Contains(t.Index) ?? !t.IsHidden)
+                        : (preSelectedAudioIndices?.Contains(t.Index) ?? !t.IsHidden)
+                }).ToList();
+
+                _videoTracks = _tracks.Where(t => t.Info.Type == "video").ToList();
+                _audioTracks = _tracks.Where(t => t.Info.Type == "audio").ToList();
+
+                // Load markers
+                _loadedMltProject.ParseMarkers();
+                _renderRangeDescription = _loadedMltProject.GetRenderRangeDescription();
+
+                // Calculate and display max end time
+                var maxEndTime = _loadedMltProject.GetTotalDurationTimecode();
+                if (!string.IsNullOrEmpty(maxEndTime))
+                    _maxEndTimeDisplay = maxEndTime;
+
+                // Initialize custom range with project markers
+                _customInPoint = _loadedMltProject.InMarker;
+                _customOutPoint = _loadedMltProject.OutMarker;
+
+                // Initialize timecode fields
+                if (_loadedMltProject.InMarker.HasValue)
+                    _inPointTimecode = _loadedMltProject.FramesToTimecode(_loadedMltProject.InMarker.Value);
+
+                if (_loadedMltProject.OutMarker.HasValue)
+                    _outPointTimecode = _loadedMltProject.FramesToTimecode(_loadedMltProject.OutMarker.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error loading MLT project data: {ex.Message}");
+            _tracks = [];
+            _videoTracks = [];
+            _audioTracks = [];
+            _renderRangeDescription = string.Empty;
+            _maxEndTimeDisplay = string.Empty;
+        }
+    }
+
+    private void UpdateOutputPath()
+    {
+        if (!string.IsNullOrEmpty(_sourcePath))
+        {
+            var videosFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+            var fileNameWithoutExt = Path.GetFileNameWithoutExtension(_sourcePath);
+
+            // MLT-only rendering - always use _rendered suffix
+            _outputPath = Path.Combine(videosFolder, $"{fileNameWithoutExt}_rendered.mp4");
+        }
+    }
+
+    private void UpdateEstimatedTime()
+    {
+        if (_hardware == null || string.IsNullOrEmpty(_sourcePath) || !_isMltSource)
+        {
+            _estimatedTime = string.Empty;
+            return;
+        }
+
+        // Estimate based on typical video duration (placeholder - would need actual video info)
+        var estimatedDuration = TimeSpan.FromMinutes(10); // Default estimate
+
+        // MLT render - can use NVENC or CPU based on the selected codec
+        var useNvenc = _mltVideoCodec.Contains("nvenc");
+        var renderTime = _hardware.EstimateFFmpegRenderTime(estimatedDuration, useNvenc);
+        var method = useNvenc ? "NVENC" : "CPU";
+        _estimatedTime = $"Estimated render time: ~{renderTime.TotalMinutes:F0} minutes ({method})";
+
+        if (useNvenc && _hardware.NvencAvailable)
+        {
+            var cpuTime = _hardware.EstimateFFmpegRenderTime(estimatedDuration, useNvenc: false);
+            _estimatedTime += $" - Saves ~{(cpuTime - renderTime).TotalMinutes:F0} minutes vs CPU!";
+        }
+    }
+
+    private void ValidateAndConvertTimecodes()
+    {
+        // Reset errors
+        _inPointError = false;
+        _inPointErrorText = string.Empty;
+        _outPointError = false;
+        _outPointErrorText = string.Empty;
+
+        if (_loadedMltProject == null || !_useCustomRange)
+            return;
+
+        // Validate and convert in point
+        if (!string.IsNullOrWhiteSpace(_inPointTimecode))
+        {
+            try
+            {
+                _customInPoint = _loadedMltProject.TimecodeToFrames(_inPointTimecode);
+            }
+            catch (Exception ex)
+            {
+                _inPointError = true;
+                _inPointErrorText = $"Invalid timecode format: {ex.Message}";
+                _customInPoint = null;
+            }
+        }
+        else
+        {
+            _customInPoint = null;
+        }
+
+        // Validate and convert out point
+        if (!string.IsNullOrWhiteSpace(_outPointTimecode))
+        {
+            try
+            {
+                _customOutPoint = _loadedMltProject.TimecodeToFrames(_outPointTimecode);
+            }
+            catch (Exception ex)
+            {
+                _outPointError = true;
+                _outPointErrorText = $"Invalid timecode format: {ex.Message}";
+                _customOutPoint = null;
+            }
+        }
+        else
+        {
+            _customOutPoint = null;
+        }
+    }
+
+    private bool IsValid()
+    {
+        _validationError = string.Empty;
+
+        if (string.IsNullOrEmpty(_sourcePath))
+        {
+            _validationError = "Please select a source file";
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(_outputPath))
+        {
+            _validationError = "Please specify an output path";
+            return false;
+        }
+
+        // CheapShotcutRandomizer only supports MLT source files
+        if (!_sourcePath.EndsWith(".mlt", StringComparison.OrdinalIgnoreCase))
+        {
+            _validationError = "Source file must be an MLT project (.mlt). For video upscaling/interpolation, use CheapUpscaler.";
+            return false;
+        }
+
+        // Validate timecodes if custom range is enabled
+        if (_useCustomRange)
+        {
+            ValidateAndConvertTimecodes();
+
+            if (_inPointError || _outPointError)
+            {
+                _validationError = "Please fix timecode format errors";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private async Task AddJobAsync()
+    {
+        if (!IsValid())
+        {
+            Snackbar.Add(_validationError, Severity.Warning);
+            StateHasChanged();
+            return;
+        }
+
+        // Verify source file actually exists before proceeding
+        if (!File.Exists(_sourcePath))
+        {
+            _validationError = "Source file does not exist";
+            StateHasChanged();
+            return;
+        }
+
+        var renderJob = new RenderJob
+        {
+            SourceVideoPath = _sourcePath,
+            OutputPath = _outputPath,
+            RenderType = RenderType.MltSource,
+            Status = RenderJobStatus.Pending
+        };
+
+        // Set up MLT render settings
+        renderJob.MeltSettings = new MeltRenderSettings
+        {
+            ThreadCount = _mltThreads,
+            Preset = _mltPreset,
+            Crf = _mltCrf,
+            VideoCodec = _mltVideoCodec,
+            AudioCodec = _mltAudioCodec,
+            AudioBitrate = _mltAudioBitrate,
+            AudioQuality = UseAudioVbr ? _mltAudioQuality : null
+        };
+
+        // Optional profile overrides (empty selections = keep the project profile)
+        if (!string.IsNullOrEmpty(_mltResolution))
+        {
+            var resolutionParts = _mltResolution.Split('x');
+            renderJob.MeltSettings.Width = int.Parse(resolutionParts[0]);
+            renderJob.MeltSettings.Height = int.Parse(resolutionParts[1]);
+
+            if (_mltAspect != "auto")
+            {
+                var aspectParts = _mltAspect.Split(':');
+                renderJob.MeltSettings.DisplayAspectNum = int.Parse(aspectParts[0]);
+                renderJob.MeltSettings.DisplayAspectDen = int.Parse(aspectParts[1]);
+            }
+        }
+
+        if (FrameRates.TryGetValue(_mltFps, out var frameRate))
+        {
+            renderJob.MeltSettings.FrameRateNum = frameRate.Num;
+            renderJob.MeltSettings.FrameRateDen = frameRate.Den;
+        }
+
+        // Store frame rate for timecode conversion
+        if (_loadedMltProject != null)
+        {
+            renderJob.FrameRate = _loadedMltProject.GetFrameRate();
+        }
+
+        // Set track selection
+        // IMPORTANT: Use actual tractor indices (Info.Index), not re-indexed positions
+        var selectedVideoIndices = _videoTracks
+            .Where(t => t.Selected)
+            .Select(t => t.Info.Index.ToString())
+            .ToArray();
+
+        var selectedAudioIndices = _audioTracks
+            .Where(t => t.Selected)
+            .Select(t => t.Info.Index.ToString())
+            .ToArray();
+
+        renderJob.SelectedVideoTracks = selectedVideoIndices.Length > 0
+            ? string.Join(",", selectedVideoIndices)
+            : null;
+
+        renderJob.SelectedAudioTracks = selectedAudioIndices.Length > 0
+            ? string.Join(",", selectedAudioIndices)
+            : null;
+
+        // Set in/out points for partial rendering
+        if (_useCustomRange)
+        {
+            renderJob.InPoint = _customInPoint;
+            renderJob.OutPoint = _customOutPoint;
+        }
+        else if (_loadedMltProject != null)
+        {
+            renderJob.InPoint = _loadedMltProject.InMarker;
+            renderJob.OutPoint = _loadedMltProject.OutMarker;
+        }
+
+        // Serialize MLT render settings
+        renderJob.RenderSettings = System.Text.Json.JsonSerializer.Serialize(renderJob.MeltSettings);
+
+        await QueueService.AddJobAsync(renderJob);
+        Draft.Clear();
+
+        Snackbar.Add($"Added {Path.GetFileName(renderJob.SourceVideoPath)} to the render queue", Severity.Success);
+        if (QueueService.IsQueuePaused)
+        {
+            Snackbar.Add("Queue is paused - press Start Queue to begin rendering", Severity.Info);
+        }
+
+        Nav.NavigateTo("/");
+    }
+}

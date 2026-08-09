@@ -128,6 +128,9 @@ public class MeltRenderService
             process.BeginErrorReadLine();
             process.BeginOutputReadLine();
 
+            // Keep the machine usable while a batch renders in the background
+            try { process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
+
             // Registered after Start so the callback can never run against an unstarted process
             using var cancelRegistration = cancellationToken.Register(() =>
             {
@@ -314,7 +317,7 @@ public class MeltRenderService
         args.Add($"acodec={settings.AudioCodec}");
 
         // Quality settings - each encoder family takes a different property
-        // (matches what Shotcut's export panel emits per encoder)
+        // (verified against Shotcut's encodedock.cpp emissions per encoder)
         if (settings.Crf.HasValue)
         {
             if (settings.VideoCodec.Contains("nvenc"))
@@ -324,13 +327,22 @@ public class MeltRenderService
             }
             else if (settings.VideoCodec.Contains("qsv"))
             {
-                args.Add($"global_quality={settings.Crf.Value}");
+                // Shotcut emits MLT's qscale (min 1), not the raw global_quality AVOption
+                args.Add($"qscale={Math.Max(1, settings.Crf.Value)}");
             }
             else if (settings.VideoCodec.Contains("amf"))
             {
                 args.Add("rc=cqp");
                 args.Add($"qp_i={settings.Crf.Value}");
                 args.Add($"qp_p={settings.Crf.Value}");
+                args.Add($"qp_b={settings.Crf.Value}");
+            }
+            else if (settings.VideoCodec == "libx265")
+            {
+                // x265 wants its options via x265-params; the bare crf is kept alongside
+                // for readability (Shotcut sets both)
+                args.Add($"x265-params=crf={settings.Crf.Value}");
+                args.Add($"crf={settings.Crf.Value}");
             }
             else
             {
@@ -345,16 +357,29 @@ public class MeltRenderService
             args.Add($"preset={settings.Preset}");
         }
 
+        // Codec threads: MLT's default is 1(!). 0 = codec auto for x264/x265;
+        // hardware encoders get cores-1 like Shotcut does
+        args.Add(settings.VideoCodec.StartsWith("libx")
+            ? "threads=0"
+            : $"threads={Math.Max(1, Environment.ProcessorCount - 1)}");
+
+        // Scaling/deinterlacing quality - Shotcut's defaults; MLT's own differ
+        args.Add("rescale=bilinear");
+        args.Add("deinterlacer=bwdif");
+
         // Audio: quality-based VBR (aq, codec-specific scale) takes precedence over
-        // average bitrate; FLAC is lossless so neither applies
+        // average bitrate; FLAC is lossless so neither applies. The vbr marker
+        // matches Shotcut (on for quality mode, constrained for average bitrate)
         if (settings.AudioCodec != "flac")
         {
             if (settings.AudioQuality.HasValue)
             {
+                args.Add("vbr=on");
                 args.Add($"aq={settings.AudioQuality.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
             }
             else if (!string.IsNullOrEmpty(settings.AudioBitrate))
             {
+                args.Add("vbr=constrained");
                 args.Add($"ab={settings.AudioBitrate}");
             }
         }
@@ -385,16 +410,17 @@ public class MeltRenderService
             args.Add($"frame_rate_den={settings.FrameRateDen ?? 1}");
         }
 
-        // CRITICAL: CPU multi-threading
-        // Use NEGATIVE value to disable frame dropping (for file rendering)
-        // Use all available cores for maximum performance
+        // CRITICAL: negative real_time disables frame dropping (required for file
+        // rendering). These are MLT frame-processing threads, each holding full frame
+        // buffers - Shotcut caps them at 4 to avoid OOM/artifacts on many-core boxes
         var threadCount = settings.ThreadCount > 0
             ? settings.ThreadCount
             : Environment.ProcessorCount;
+        threadCount = Math.Clamp(threadCount, 1, 4);
 
         args.Add($"real_time=-{threadCount}");
 
-        Debug.WriteLine($"Using CPU multi-threading with {threadCount} cores");
+        Debug.WriteLine($"Using {threadCount} MLT processing threads");
 
         // MP4 optimization
         if (outputPath.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
