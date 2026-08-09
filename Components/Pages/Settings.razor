@@ -1681,15 +1681,15 @@ except Exception as e:
                 {
                     System.Diagnostics.Debug.WriteLine($"Starting extraction of {downloadPath}...");
 
-                    var extractionReaderOptions = new ReaderOptions { ExtractFullPath = true, Overwrite = true };
-                    using (var archive = ArchiveFactory.OpenArchive(downloadPath, extractionReaderOptions))
+                    var extractionOptions = new SharpCompress.Common.ExtractionOptions { ExtractFullPath = true, Overwrite = true };
+                    using (var archive = ArchiveFactory.OpenArchive(downloadPath))
                     {
                         System.Diagnostics.Debug.WriteLine($"Archive opened, extracting {archive.Entries.Count()} entries...");
 
                         int extractedCount = 0;
                         foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
                         {
-                            entry.WriteToDirectory(extractPath);
+                            entry.WriteToDirectory(extractPath, extractionOptions);
                             extractedCount++;
 
                             // Log progress every 10 files
@@ -2208,11 +2208,11 @@ except Exception as e:
                     {
                         try
                         {
-                            var modelReaderOptions = new ReaderOptions { ExtractFullPath = true, Overwrite = true };
-                            using var archive = SharpCompress.Archives.SevenZip.SevenZipArchive.OpenArchive(modelDownloadPath, modelReaderOptions);
+                            var modelExtractionOptions = new SharpCompress.Common.ExtractionOptions { ExtractFullPath = true, Overwrite = true };
+                            using var archive = SharpCompress.Archives.SevenZip.SevenZipArchive.OpenArchive(modelDownloadPath);
                             foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
                             {
-                                entry.WriteToDirectory(modelExtractPath);
+                                entry.WriteToDirectory(modelExtractPath, modelExtractionOptions);
                             }
                             modelExtracted = true;
                         }
