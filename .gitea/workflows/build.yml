@@ -1,0 +1,27 @@
+name: Build & Test
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: windows
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore
+        run: dotnet restore CheapShotcutRandomizer.slnx
+
+      - name: Build
+        run: dotnet build CheapShotcutRandomizer.slnx --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test CheapShotcutRandomizer.slnx --no-build --configuration Release --verbosity normal
