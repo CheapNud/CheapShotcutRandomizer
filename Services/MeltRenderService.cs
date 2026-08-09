@@ -345,10 +345,44 @@ public class MeltRenderService
             args.Add($"preset={settings.Preset}");
         }
 
-        // Audio bitrate (FLAC is lossless - bitrate does not apply)
-        if (!string.IsNullOrEmpty(settings.AudioBitrate) && settings.AudioCodec != "flac")
+        // Audio: quality-based VBR (aq, codec-specific scale) takes precedence over
+        // average bitrate; FLAC is lossless so neither applies
+        if (settings.AudioCodec != "flac")
         {
-            args.Add($"ab={settings.AudioBitrate}");
+            if (settings.AudioQuality.HasValue)
+            {
+                args.Add($"aq={settings.AudioQuality.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+            }
+            else if (!string.IsNullOrEmpty(settings.AudioBitrate))
+            {
+                args.Add($"ab={settings.AudioBitrate}");
+            }
+        }
+
+        // Optional output profile overrides (default: the project profile) - the same
+        // consumer properties Shotcut's export panel emits
+        if (settings.Width.HasValue && settings.Height.HasValue)
+        {
+            args.Add($"width={settings.Width.Value}");
+            args.Add($"height={settings.Height.Value}");
+
+            var darNum = settings.DisplayAspectNum ?? settings.Width.Value;
+            var darDen = settings.DisplayAspectDen ?? settings.Height.Value;
+            args.Add($"display_aspect_num={darNum}");
+            args.Add($"display_aspect_den={darDen}");
+
+            // Pixel (sample) aspect = DAR / (W/H), reduced
+            var sarNum = darNum * settings.Height.Value;
+            var sarDen = darDen * settings.Width.Value;
+            var divisor = Gcd(sarNum, sarDen);
+            args.Add($"sample_aspect_num={sarNum / divisor}");
+            args.Add($"sample_aspect_den={sarDen / divisor}");
+        }
+
+        if (settings.FrameRateNum.HasValue)
+        {
+            args.Add($"frame_rate_num={settings.FrameRateNum.Value}");
+            args.Add($"frame_rate_den={settings.FrameRateDen ?? 1}");
         }
 
         // CRITICAL: CPU multi-threading
@@ -370,6 +404,8 @@ public class MeltRenderService
 
         return string.Join(" ", args);
     }
+
+    private static int Gcd(int a, int b) => b == 0 ? a : Gcd(b, a % b);
 }
 
 public class RenderProgress

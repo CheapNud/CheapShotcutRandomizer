@@ -87,6 +87,51 @@
                                 </MudText>
                             }
                         </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudSelect @bind-Value="_mltResolution"
+                                       Label="Resolution"
+                                       Variant="Variant.Outlined"
+                                       T="string"
+                                       Margin="Margin.Dense">
+                                <MudSelectItem Value="@("")" T="string">Project default</MudSelectItem>
+                                <MudSelectItem Value="@("3840x2160")" T="string">3840 × 2160 (4K)</MudSelectItem>
+                                <MudSelectItem Value="@("2560x1440")" T="string">2560 × 1440 (QHD)</MudSelectItem>
+                                <MudSelectItem Value="@("1920x1080")" T="string">1920 × 1080 (FHD)</MudSelectItem>
+                                <MudSelectItem Value="@("1280x720")" T="string">1280 × 720 (HD)</MudSelectItem>
+                                <MudSelectItem Value="@("854x480")" T="string">854 × 480 (SD)</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudSelect @bind-Value="_mltAspect"
+                                       Label="Aspect Ratio"
+                                       Variant="Variant.Outlined"
+                                       T="string"
+                                       Margin="Margin.Dense"
+                                       Disabled="@(string.IsNullOrEmpty(_mltResolution))">
+                                <MudSelectItem Value="@("auto")" T="string">Match resolution</MudSelectItem>
+                                <MudSelectItem Value="@("16:9")" T="string">16:9</MudSelectItem>
+                                <MudSelectItem Value="@("4:3")" T="string">4:3</MudSelectItem>
+                                <MudSelectItem Value="@("21:9")" T="string">21:9</MudSelectItem>
+                                <MudSelectItem Value="@("1:1")" T="string">1:1</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudSelect @bind-Value="_mltFps"
+                                       Label="Frame Rate"
+                                       Variant="Variant.Outlined"
+                                       T="string"
+                                       Margin="Margin.Dense">
+                                <MudSelectItem Value="@("")" T="string">Project default</MudSelectItem>
+                                <MudSelectItem Value="@("23.976")" T="string">23.976 fps</MudSelectItem>
+                                <MudSelectItem Value="@("24")" T="string">24 fps</MudSelectItem>
+                                <MudSelectItem Value="@("25")" T="string">25 fps</MudSelectItem>
+                                <MudSelectItem Value="@("29.97")" T="string">29.97 fps</MudSelectItem>
+                                <MudSelectItem Value="@("30")" T="string">30 fps</MudSelectItem>
+                                <MudSelectItem Value="@("50")" T="string">50 fps</MudSelectItem>
+                                <MudSelectItem Value="@("59.94")" T="string">59.94 fps</MudSelectItem>
+                                <MudSelectItem Value="@("60")" T="string">60 fps</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
                         <MudItem xs="12">
                             <MudSlider @bind-Value="_mltCrf"
                                        Min="15"
@@ -115,8 +160,9 @@
                     </MudStack>
 
                     <MudGrid Spacing="2">
-                        <MudItem xs="12" md="6">
+                        <MudItem xs="12" md="4">
                             <MudSelect @bind-Value="_mltAudioCodec"
+                                       @bind-Value:after="OnAudioCodecChanged"
                                        Label="Codec"
                                        Variant="Variant.Outlined"
                                        T="string"
@@ -127,19 +173,45 @@
                                 <MudSelectItem Value="@("flac")" T="string">FLAC (lossless)</MudSelectItem>
                             </MudSelect>
                         </MudItem>
-                        <MudItem xs="12" md="6">
-                            <MudSelect @bind-Value="_mltAudioBitrate"
-                                       Label="Bitrate"
+                        <MudItem xs="12" md="4">
+                            <MudSelect @bind-Value="_mltAudioRateControl"
+                                       Label="Rate Control"
                                        Variant="Variant.Outlined"
                                        T="string"
                                        Margin="Margin.Dense"
-                                       Disabled="@(_mltAudioCodec == "flac")">
-                                <MudSelectItem Value="@("128k")" T="string">128 kb/s</MudSelectItem>
-                                <MudSelectItem Value="@("192k")" T="string">192 kb/s</MudSelectItem>
-                                <MudSelectItem Value="@("256k")" T="string">256 kb/s</MudSelectItem>
-                                <MudSelectItem Value="@("320k")" T="string">320 kb/s</MudSelectItem>
-                                <MudSelectItem Value="@("384k")" T="string">384 kb/s</MudSelectItem>
+                                       Disabled="@(!SupportsAudioVbr)">
+                                <MudSelectItem Value="@("abr")" T="string">Average Bitrate</MudSelectItem>
+                                <MudSelectItem Value="@("vbr")" T="string">Quality-based VBR</MudSelectItem>
                             </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            @if (UseAudioVbr)
+                            {
+                                <MudNumericField @bind-Value="_mltAudioQuality"
+                                                 Label="Quality"
+                                                 Variant="Variant.Outlined"
+                                                 T="double"
+                                                 Margin="Margin.Dense"
+                                                 Min="@(_mltAudioCodec == "aac" ? 0.1 : 0)"
+                                                 Max="@(_mltAudioCodec == "aac" ? 2.0 : 9)"
+                                                 Step="@(_mltAudioCodec == "aac" ? 0.1 : 1)"
+                                                 HelperText="@AudioQualityHelper" />
+                            }
+                            else
+                            {
+                                <MudSelect @bind-Value="_mltAudioBitrate"
+                                           Label="Bitrate"
+                                           Variant="Variant.Outlined"
+                                           T="string"
+                                           Margin="Margin.Dense"
+                                           Disabled="@(_mltAudioCodec == "flac")">
+                                    <MudSelectItem Value="@("128k")" T="string">128 kb/s</MudSelectItem>
+                                    <MudSelectItem Value="@("192k")" T="string">192 kb/s</MudSelectItem>
+                                    <MudSelectItem Value="@("256k")" T="string">256 kb/s</MudSelectItem>
+                                    <MudSelectItem Value="@("320k")" T="string">320 kb/s</MudSelectItem>
+                                    <MudSelectItem Value="@("384k")" T="string">384 kb/s</MudSelectItem>
+                                </MudSelect>
+                            }
                         </MudItem>
                     </MudGrid>
                 </div>
@@ -302,6 +374,44 @@
     private string _mltVideoCodec = "libx264";
     private string _mltAudioCodec = "aac";
     private string _mltAudioBitrate = "128k";
+    private string _mltAudioRateControl = "abr";
+    private double _mltAudioQuality = 1.2;
+    private string _mltResolution = "";
+    private string _mltAspect = "auto";
+    private string _mltFps = "";
+
+    // Fractional NTSC rates are rationals, not decimals - 29.97 is 30000/1001
+    private static readonly Dictionary<string, (int Num, int Den)> FrameRates = new()
+    {
+        ["23.976"] = (24000, 1001),
+        ["24"] = (24, 1),
+        ["25"] = (25, 1),
+        ["29.97"] = (30000, 1001),
+        ["30"] = (30, 1),
+        ["50"] = (50, 1),
+        ["59.94"] = (60000, 1001),
+        ["60"] = (60, 1)
+    };
+
+    private bool SupportsAudioVbr => _mltAudioCodec is "aac" or "libmp3lame";
+
+    private bool UseAudioVbr => SupportsAudioVbr && _mltAudioRateControl == "vbr";
+
+    private string AudioQualityHelper => _mltAudioCodec == "aac"
+        ? "0.1–2, higher = better (~1.2 ≈ 128 kb/s)"
+        : "0–9, lower = better (2 ≈ 190 kb/s)";
+
+    private void OnAudioCodecChanged()
+    {
+        // Codecs without a VBR mode fall back to average bitrate
+        if (!SupportsAudioVbr)
+        {
+            _mltAudioRateControl = "abr";
+        }
+
+        // The aq scale differs per codec - reset to a sensible default on switch
+        _mltAudioQuality = _mltAudioCodec == "aac" ? 1.2 : 2;
+    }
 
     private bool IsCpuCodec => _mltVideoCodec.StartsWith("libx");
 
@@ -703,8 +813,30 @@
                 Crf = _mltCrf,
                 VideoCodec = _mltVideoCodec,
                 AudioCodec = _mltAudioCodec,
-                AudioBitrate = _mltAudioBitrate
+                AudioBitrate = _mltAudioBitrate,
+                AudioQuality = UseAudioVbr ? _mltAudioQuality : null
             };
+
+            // Optional profile overrides (empty selections = keep the project profile)
+            if (!string.IsNullOrEmpty(_mltResolution))
+            {
+                var resolutionParts = _mltResolution.Split('x');
+                renderJob.MeltSettings.Width = int.Parse(resolutionParts[0]);
+                renderJob.MeltSettings.Height = int.Parse(resolutionParts[1]);
+
+                if (_mltAspect != "auto")
+                {
+                    var aspectParts = _mltAspect.Split(':');
+                    renderJob.MeltSettings.DisplayAspectNum = int.Parse(aspectParts[0]);
+                    renderJob.MeltSettings.DisplayAspectDen = int.Parse(aspectParts[1]);
+                }
+            }
+
+            if (FrameRates.TryGetValue(_mltFps, out var frameRate))
+            {
+                renderJob.MeltSettings.FrameRateNum = frameRate.Num;
+                renderJob.MeltSettings.FrameRateDen = frameRate.Den;
+            }
 
             // Store frame rate for timecode conversion
             if (_loadedMltProject != null)

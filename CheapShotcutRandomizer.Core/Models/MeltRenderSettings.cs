@@ -44,7 +44,36 @@ public class MeltRenderSettings
     public int? Crf { get; set; } = 23;
 
     /// <summary>
-    /// Audio bitrate: "128k", "192k", "256k", etc.
+    /// Audio bitrate: "128k", "192k", "256k", etc. Ignored when AudioQuality is set.
     /// </summary>
     public string AudioBitrate { get; set; } = "128k";
+
+    /// <summary>
+    /// Audio quality for variable bitrate (melt "aq" property, codec-specific scale:
+    /// AAC ~0.1-2 higher = better, MP3/LAME 0-9 lower = better). Null = average bitrate.
+    /// </summary>
+    public double? AudioQuality { get; set; }
+
+    /// <summary>
+    /// Output resolution override. Null = use the project profile.
+    /// </summary>
+    public int? Width { get; set; }
+
+    /// <summary>
+    /// Output resolution override. Null = use the project profile.
+    /// </summary>
+    public int? Height { get; set; }
+
+    /// <summary>
+    /// Display aspect ratio override (e.g. 16:9). Null = derived from resolution.
+    /// Only applied when Width/Height are set.
+    /// </summary>
+    public int? DisplayAspectNum { get; set; }
+    public int? DisplayAspectDen { get; set; }
+
+    /// <summary>
+    /// Frame rate override as a rational (e.g. 30000/1001 for 29.97). Null = project frame rate.
+    /// </summary>
+    public int? FrameRateNum { get; set; }
+    public int? FrameRateDen { get; set; }
 }
