@@ -182,6 +182,7 @@
     private string _currentFileSize = string.Empty;
     private System.Timers.Timer? _fileSizeTimer;
     private DateTime _lastFileSizeUpdate = DateTime.MinValue;
+    private bool _disposed;
 
     // Monotonic progress tracking - only allow values to increase
     private double _lastProgressPercentage = 0;
@@ -375,6 +376,9 @@
 
     private async void OnFileSizeTimerElapsed(object? sender, ElapsedEventArgs e)
     {
+        // Ticks race component disposal; an unhandled throw here is async void and kills the process
+        if (_disposed) return;
+
         // Debounce: only update once every 2 seconds
         var now = DateTime.UtcNow;
         if ((now - _lastFileSizeUpdate).TotalSeconds < 2)
@@ -382,6 +386,8 @@
 
         _lastFileSizeUpdate = now;
 
+        try
+        {
         await InvokeAsync(() =>
         {
             try
@@ -401,6 +407,11 @@
                 // Silently fail if we can't read the file
             }
         });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"File size tick failed: {ex.Message}");
+        }
     }
 
     private static string FormatBytes(long bytes)
@@ -420,6 +431,7 @@
 
     public void Dispose()
     {
+        _disposed = true;
         StopFileSizeMonitoring();
     }
 }

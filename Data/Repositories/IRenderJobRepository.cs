@@ -28,10 +28,10 @@ public interface IRenderJobRepository
     Task<List<RenderJob>> GetActiveJobsAsync();
 
     /// <summary>
-    /// Atomically claim the next pending job for processing
-    /// Updates status to Running and sets ProcessId/MachineName
+    /// Atomically claim a pending job for processing (Pending -> Running)
+    /// Returns false if the job is no longer pending
     /// </summary>
-    Task<RenderJob?> ClaimNextJobAsync(int processId, string machineName);
+    Task<bool> TryClaimJobAsync(Guid jobId, int processId, string machineName);
 
     /// <summary>
     /// Add a new job to the database

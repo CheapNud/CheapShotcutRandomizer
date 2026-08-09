@@ -90,8 +90,11 @@ public class Playlist
     [XmlElement(ElementName = "property")]
     public List<Property> Property { get; set; } = [];
 
-    // Raw XML elements for order preservation during serialization
-    private XmlElement[]? _rawItems;
+    // Document-order backing store; entries and blanks interleave on a real timeline,
+    // so losing this order shifts clips and moves the gaps to the end on re-serialization
+    private List<object>? _orderedItems;
+    private List<Entry> _entry = [];
+    private List<Blank> _blank = [];
 
     [XmlElement("entry", typeof(Entry))]
     [XmlElement("blank", typeof(Blank))]
@@ -99,44 +102,38 @@ public class Playlist
     {
         get
         {
-            // If we have raw items (from deserialization), parse them
-            if (_rawItems != null)
-            {
-                return ParseRawItems(_rawItems);
-            }
+            // Preserve document order when we have it (deserialized or explicitly assigned);
+            // fall back to entries-then-blanks for playlists built via the legacy properties
+            if (_orderedItems != null)
+                return [.. _orderedItems];
 
-            // Otherwise, combine Entry and Blank in order (for new playlists)
             var items = new List<object>();
-            if (Entry != null) items.AddRange(Entry);
-            if (Blank != null) items.AddRange(Blank);
+            items.AddRange(_entry);
+            items.AddRange(_blank);
             return [.. items];
         }
         set
         {
-            // Store items and populate legacy properties
-            var entries = new List<Entry>();
-            var blanks = new List<Blank>();
-
-            foreach (var item in value)
-            {
-                if (item is Entry entry)
-                    entries.Add(entry);
-                else if (item is Blank blank)
-                    blanks.Add(blank);
-            }
-
-            Entry = entries;
-            Blank = blanks;
-            _rawItems = null;
+            _orderedItems = [.. value];
+            _entry = value.OfType<Entry>().ToList();
+            _blank = value.OfType<Blank>().ToList();
         }
     }
 
-    // Legacy properties for backward compatibility
+    // Legacy views; assigning either redefines the playlist content, so the stored order is dropped
     [XmlIgnore]
-    public List<Entry> Entry { get; set; } = [];
+    public List<Entry> Entry
+    {
+        get => _entry;
+        set { _entry = value; _orderedItems = null; }
+    }
 
     [XmlIgnore]
-    public List<Blank> Blank { get; set; } = [];
+    public List<Blank> Blank
+    {
+        get => _blank;
+        set { _blank = value; _orderedItems = null; }
+    }
 
     [XmlAttribute(AttributeName = "id")]
     public string Id { get; set; } = string.Empty;
@@ -154,31 +151,6 @@ public class Playlist
     public List<IPlaylistItem> OrderedItems => Items.Cast<IPlaylistItem>().ToList();
 
     public string Name => Property?.FirstOrDefault(x => x.Name == @"shotcut:name")?.Text ?? "system track";
-
-    private static object[] ParseRawItems(XmlElement[] rawElements)
-    {
-        var items = new List<object>();
-        var entrySerializer = new XmlSerializer(typeof(Entry));
-        var blankSerializer = new XmlSerializer(typeof(Blank));
-
-        foreach (var element in rawElements)
-        {
-            if (element.LocalName == "entry")
-            {
-                using var reader = new XmlNodeReader(element);
-                if (entrySerializer.Deserialize(reader) is Entry entry)
-                    items.Add(entry);
-            }
-            else if (element.LocalName == "blank")
-            {
-                using var reader = new XmlNodeReader(element);
-                if (blankSerializer.Deserialize(reader) is Blank blank)
-                    items.Add(blank);
-            }
-        }
-
-        return [.. items];
-    }
 }
 
 [XmlRoot(ElementName = "producer")]

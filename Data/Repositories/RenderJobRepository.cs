@@ -42,44 +42,20 @@ public class RenderJobRepository(RenderJobDbContext context) : IRenderJobReposit
             .ToListAsync();
     }
 
-    public async Task<RenderJob?> ClaimNextJobAsync(int processId, string machineName)
+    public async Task<bool> TryClaimJobAsync(Guid jobId, int processId, string machineName)
     {
-        // Use a transaction to atomically claim the next job
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        // Atomic Pending -> Running transition; the WHERE clause makes concurrent
+        // claims (stale work items, cancel races) lose cleanly with 0 rows affected
+        var claimedRows = await _context.RenderJobs
+            .Where(j => j.JobId == jobId && j.Status == RenderJobStatus.Pending)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(j => j.Status, RenderJobStatus.Running)
+                .SetProperty(j => j.ProcessId, processId)
+                .SetProperty(j => j.MachineName, machineName)
+                .SetProperty(j => j.StartedAt, DateTime.UtcNow)
+                .SetProperty(j => j.LastUpdatedAt, DateTime.UtcNow));
 
-        try
-        {
-            // Find the oldest pending job
-            var nextJob = await _context.RenderJobs
-                .Where(j => j.Status == RenderJobStatus.Pending)
-                .OrderBy(j => j.CreatedAt)
-                .FirstOrDefaultAsync();
-
-            if (nextJob == null)
-            {
-                await transaction.CommitAsync();
-                return null;
-            }
-
-            // Claim the job
-            nextJob.Status = RenderJobStatus.Running;
-            nextJob.ProcessId = processId;
-            nextJob.MachineName = machineName;
-            nextJob.StartedAt = DateTime.UtcNow;
-            nextJob.LastUpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            await transaction.CommitAsync();
-
-            Debug.WriteLine($"Claimed job {nextJob.JobId} for processing");
-            return nextJob;
-        }
-        catch (Exception ex)
-        {
-            await transaction.RollbackAsync();
-            Debug.WriteLine($"Failed to claim job: {ex.Message}");
-            throw;
-        }
+        return claimedRows > 0;
     }
 
     public async Task AddAsync(RenderJob renderJob)

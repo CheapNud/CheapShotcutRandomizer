@@ -331,6 +331,7 @@
     private QueueStatistics? _queueStats;
     private bool _isLoadingJobs = true;
     private System.Threading.Timer? _refreshTimer;
+    private bool _disposed;
     private DateTime _lastProgressUIUpdate = DateTime.MinValue;
     private int _totalJobCount = 0;
 
@@ -405,15 +406,28 @@
 
     private async Task RefreshJobsInternal()
     {
-        await InvokeAsync(async () =>
+        // Timer callbacks are async void at the delegate boundary: an exception after
+        // disposal (mid-flight tick racing navigation) would kill the desktop process
+        if (_disposed) return;
+
+        try
         {
-            await LoadJobs();
-            StateHasChanged();
-        });
+            await InvokeAsync(async () =>
+            {
+                await LoadJobs();
+                StateHasChanged();
+            });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"RenderQueue refresh tick failed: {ex.Message}");
+        }
     }
 
     private async void OnProgressChanged(object? sender, RenderProgressEventArgs e)
     {
+        if (_disposed) return;
+
         // Throttle UI updates to 100ms (10 fps max) to prevent progress bar glitching
         var now = DateTime.UtcNow;
         if ((now - _lastProgressUIUpdate).TotalMilliseconds < 100)
@@ -421,6 +435,8 @@
 
         _lastProgressUIUpdate = now;
 
+        try
+        {
         await InvokeAsync(() =>
         {
             // Find job in active jobs list
@@ -434,10 +450,19 @@
                 StateHasChanged();
             }
         });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"RenderQueue progress update failed: {ex.Message}");
+        }
     }
 
     private async void OnStatusChanged(object? sender, RenderProgressEventArgs e)
     {
+        if (_disposed) return;
+
+        try
+        {
         await InvokeAsync(async () =>
         {
             // Reload jobs from database when status changes
@@ -459,6 +484,11 @@
                 Snackbar.Add(message, severity);
             }
         });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"RenderQueue status update failed: {ex.Message}");
+        }
     }
 
     private async Task OpenAddJobDialog()
@@ -644,12 +674,21 @@
 
     private async void OnQueueStatusChanged(object? sender, bool isPaused)
     {
-        await InvokeAsync(async () =>
+        if (_disposed) return;
+
+        try
         {
-            _isQueuePaused = isPaused;
-            _queueStats = await QueueService.GetQueueStatisticsAsync();
-            StateHasChanged();
-        });
+            await InvokeAsync(async () =>
+            {
+                _isQueuePaused = isPaused;
+                _queueStats = await QueueService.GetQueueStatisticsAsync();
+                StateHasChanged();
+            });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"RenderQueue queue-status update failed: {ex.Message}");
+        }
     }
 
     private async Task HandleClearAllJobs()
@@ -691,6 +730,8 @@
 
     public void Dispose()
     {
+        _disposed = true;
+
         // CRITICAL: Unsubscribe from events to prevent memory leaks
         QueueService.ProgressChanged -= OnProgressChanged;
         QueueService.StatusChanged -= OnStatusChanged;

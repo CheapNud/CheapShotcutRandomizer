@@ -79,7 +79,7 @@ public class MeltRenderService
 
             var startTime = DateTime.Now;
 
-            var process = new Process
+            using var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
@@ -93,7 +93,7 @@ public class MeltRenderService
                 EnableRaisingEvents = true
             };
 
-            var tcs = new TaskCompletionSource<bool>();
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             process.ErrorDataReceived += (sender, e) =>
             {
@@ -121,26 +121,36 @@ public class MeltRenderService
 
             process.Exited += (sender, e) =>
             {
-                tcs.SetResult(process.ExitCode == 0);
+                tcs.TrySetResult(process.ExitCode == 0);
             };
-
-            // Register cancellation with graceful shutdown
-            cancellationToken.Register(async () =>
-            {
-                Debug.WriteLine("Melt render cancelled - initiating graceful shutdown...");
-
-                // Use ProcessManager for graceful shutdown with process tree cleanup
-                await ProcessManager.GracefulShutdownAsync(
-                    process,
-                    gracefulTimeoutMs: 3000,
-                    processName: "melt");
-            });
 
             process.Start();
             process.BeginErrorReadLine();
             process.BeginOutputReadLine();
 
-            return await tcs.Task;
+            // Registered after Start so the callback can never run against an unstarted process
+            using var cancelRegistration = cancellationToken.Register(() =>
+            {
+                Debug.WriteLine("Melt render cancelled - initiating graceful shutdown...");
+
+                // Use ProcessManager for graceful shutdown with process tree cleanup
+                _ = ProcessManager.GracefulShutdownAsync(
+                    process,
+                    gracefulTimeoutMs: 3000,
+                    processName: "melt");
+            });
+
+            var success = await tcs.Task;
+
+            // A cancelled kill must surface as cancellation, not as a failed render —
+            // otherwise the queue's retry logic resurrects cancelled/paused jobs
+            cancellationToken.ThrowIfCancellationRequested();
+
+            return success;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
