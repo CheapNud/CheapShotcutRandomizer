@@ -32,14 +32,9 @@ public interface IRenderQueueService
 
     // Queue management
     /// <summary>
-    /// Add a new render job to the queue (alias: EnqueueJobAsync)
+    /// Add a new render job to the queue
     /// </summary>
     Task<Guid> AddJobAsync(RenderJob renderJob);
-
-    /// <summary>
-    /// Enqueue a new render job (alias for AddJobAsync)
-    /// </summary>
-    Task<Guid> EnqueueJobAsync(RenderJob renderJob);
 
     /// <summary>
     /// Pause a running job

@@ -2,7 +2,6 @@ using CheapAvaloniaBlazor.Hosting;
 using CheapAvaloniaBlazor.Extensions;
 using CheapShotcutRandomizer.Services;
 using CheapShotcutRandomizer.Services.Queue;
-using CheapShotcutRandomizer.Services.Utilities;
 using CheapShotcutRandomizer.Data;
 using CheapShotcutRandomizer.Data.Repositories;
 using CheapHelpers.Services.DataExchange.Xml;
@@ -44,19 +43,9 @@ class Program
         builder.Services.AddScoped<ShotcutService>();
         builder.Services.AddScoped<FileSearchService>();
 
-        // Dependency management services
-        builder.Services.AddSingleton<DependencyChecker>();
-        builder.Services.AddSingleton<DependencyInstaller>();
-
         // Video rendering services
-        // FFmpegRenderService is Singleton to ensure FFMpegCore is configured once on startup
-        builder.Services.AddSingleton<FFmpegRenderService>();
         builder.Services.AddScoped<MeltRenderService>();
         builder.Services.AddSingleton<HardwareDetectionService>();
-
-        // Utility services
-        builder.Services.AddScoped<CheapShotcutRandomizer.Services.Utilities.VideoValidator>();
-        builder.Services.AddScoped<CheapShotcutRandomizer.Services.Utilities.FFmpegErrorHandler>();
 
         // Database for render queue
         builder.Services.AddDbContext<RenderJobDbContext>(options =>
@@ -84,7 +73,6 @@ class Program
             sp.GetRequiredService<RenderQueueService>());
 
         // Initialization hosted services (run after app starts)
-        builder.Services.AddHostedService<FFmpegInitializationService>(); // Initialize FFmpeg first
         builder.Services.AddHostedService<DatabaseInitializationService>();
 
         // Configure graceful shutdown
@@ -94,7 +82,6 @@ class Program
         });
 
         // Run the app - all Avalonia complexity handled by the package
-        // Note: DebugLogger is initialized lazily on first use via SettingsService
         builder.RunApp(args);
     }
 }

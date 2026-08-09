@@ -373,3 +373,5 @@ FodyWeavers.xsd
 CLAUDE.md
 /wwwroot/cheap-blazor-interop.js
 deploy/out/
+stdout.txt
+stderr.txt
