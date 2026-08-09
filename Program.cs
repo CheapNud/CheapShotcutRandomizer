@@ -69,9 +69,9 @@ class Program
                 }
             }
         }
-        catch (IOException)
+        catch (Exception)
         {
-            // Migration is best-effort; a locked legacy file just means a fresh queue DB
+            // Migration is best-effort; a locked or inaccessible legacy file just means a fresh queue DB
         }
 
         builder.Services.AddDbContext<RenderJobDbContext>(options =>
