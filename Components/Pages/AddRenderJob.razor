@@ -156,8 +156,12 @@
                                Max="@_maxThreads"
                                Step="1"
                                Color="Color.Primary">
-                        CPU Threads: @_mltThreads
+                        Processing Threads: @_mltThreads
                     </MudSlider>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        MLT frame-processing pipeline threads (capped at 4 — more risks out-of-memory).
+                        The encoder itself always uses all CPU cores.
+                    </MudText>
                 </MudItem>
             </MudGrid>
         </MudStep>
@@ -321,7 +325,7 @@
                     <tbody>
                         <tr><td><strong>Source</strong></td><td>@Path.GetFileName(_sourcePath)</td></tr>
                         <tr><td><strong>Output</strong></td><td>@_outputPath</td></tr>
-                        <tr><td><strong>Video</strong></td><td>@_mltVideoCodec · @QualityLabel @_mltCrf@(IsCpuCodec ? $" · {_mltPreset}" : "") · @_mltThreads threads</td></tr>
+                        <tr><td><strong>Video</strong></td><td>@_mltVideoCodec · @QualityLabel @_mltCrf@(IsCpuCodec ? $" · {_mltPreset}" : "")</td></tr>
                         <tr><td><strong>Profile</strong></td><td>@(string.IsNullOrEmpty(_mltResolution) ? "Project default" : $"{_mltResolution} ({_mltAspect})") · @(string.IsNullOrEmpty(_mltFps) ? "project fps" : $"{_mltFps} fps")</td></tr>
                         <tr><td><strong>Audio</strong></td><td>@_mltAudioCodec · @(UseAudioVbr ? $"VBR q{_mltAudioQuality}" : _mltAudioCodec == "flac" ? "lossless" : _mltAudioBitrate)</td></tr>
                         <tr><td><strong>Tracks</strong></td><td>@_videoTracks.Count(t => t.Selected) video / @_audioTracks.Count(t => t.Selected) audio selected</td></tr>
@@ -445,8 +449,11 @@
     protected override async Task OnInitializedAsync()
     {
         _hardware = await HardwareService.DetectHardwareAsync();
-        _maxThreads = _hardware.CpuCoreCount;
-        _mltThreads = _hardware.CpuCoreCount;
+
+        // MLT frame-processing threads, capped at 4 like Shotcut (each holds full frame
+        // buffers); encoder threads are separate and always use all cores
+        _maxThreads = Math.Min(4, _hardware.CpuCoreCount);
+        _mltThreads = _maxThreads;
 
         // Load app settings for defaults
         _appSettings = await SettingsService.LoadSettingsAsync();
