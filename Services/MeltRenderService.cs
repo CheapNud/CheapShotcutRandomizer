@@ -62,21 +62,18 @@ public class MeltRenderService
             Debug.WriteLine("Ignoring UseHardwareAcceleration and using CPU multi-threading instead");
         }
 
-        // Apply track selection if specified, using TemporaryFileManager for cleanup
-        // Temp file must be in source directory to preserve relative paths in MLT
-        string actualMltPath = mltFilePath;
+        // Every render goes through a render-only XML copy in the system temp dir
+        // (Shotcut's invocation shape): absolute media paths, autoclose, proxy guard,
+        // optional track selection, and the avformat consumer embedded as an XML element
         TemporaryFileManager? tempManager = null;
 
         try
         {
-            if (!string.IsNullOrEmpty(selectedVideoTracks) || !string.IsNullOrEmpty(selectedAudioTracks))
-            {
-                var sourceDir = Path.GetDirectoryName(mltFilePath)
-                    ?? throw new ArgumentException("Cannot determine source directory from MLT path", nameof(mltFilePath));
-                tempManager = new TemporaryFileManager(sourceDir);
-                actualMltPath = await ApplyTrackSelectionAsync(mltFilePath, selectedVideoTracks, selectedAudioTracks, tempManager);
-            }
-            var arguments = BuildMeltArguments(actualMltPath, outputPath, settings, inPoint, outPoint);
+            tempManager = new TemporaryFileManager(Path.GetTempPath());
+            var actualMltPath = await PrepareRenderXmlAsync(
+                mltFilePath, outputPath, settings, selectedVideoTracks, selectedAudioTracks, tempManager);
+
+            var arguments = BuildMeltArguments(actualMltPath, settings, inPoint, outPoint);
             Debug.WriteLine($"melt command: {_meltExecutable} {arguments}");
 
             var startTime = DateTime.Now;
@@ -181,18 +178,58 @@ public class MeltRenderService
     }
 
     /// <summary>
-    /// Apply track selection to an MLT project by creating a modified copy
+    /// Build the render-only XML copy melt actually consumes: track selection applied,
+    /// media paths made absolute (the copy lives in system temp), playlists autoclosed,
+    /// proxy resources restored, and the avformat consumer embedded as an XML element.
     /// IMPORTANT: System tracks (like "black" background) are NEVER hidden - they're required for rendering
     /// </summary>
-    private async Task<string> ApplyTrackSelectionAsync(string mltFilePath, string? selectedVideoTracks, string? selectedAudioTracks, TemporaryFileManager tempManager)
+    private async Task<string> PrepareRenderXmlAsync(
+        string mltFilePath,
+        string outputPath,
+        MeltRenderSettings settings,
+        string? selectedVideoTracks,
+        string? selectedAudioTracks,
+        TemporaryFileManager tempManager)
     {
-        Debug.WriteLine($"Applying track selection - Video: {selectedVideoTracks}, Audio: {selectedAudioTracks}");
-
         // Load the MLT project
         var project = await _shotcutService.LoadProjectAsync(mltFilePath);
         if (project == null)
-            throw new InvalidOperationException("Failed to load MLT project for track selection");
+            throw new InvalidOperationException("Failed to load MLT project for rendering");
 
+        if (!string.IsNullOrEmpty(selectedVideoTracks) || !string.IsNullOrEmpty(selectedAudioTracks))
+        {
+            Debug.WriteLine($"Applying track selection - Video: {selectedVideoTracks}, Audio: {selectedAudioTracks}");
+            ApplyTrackSelection(project, selectedVideoTracks, selectedAudioTracks);
+        }
+
+        // Render-only XML hardening (Shotcut does the same on export):
+        // autoclose frees file handles as the playlist advances - matters for
+        // randomized playlists with hundreds of clips
+        foreach (var playlist in project.Playlist)
+        {
+            playlist.Autoclose = "1";
+        }
+
+        StripProxyResources(project);
+
+        // The render copy lives in system temp, so relative media paths must become
+        // absolute against the source project's directory (Shotcut exports absolute too)
+        var sourceDir = Path.GetDirectoryName(Path.GetFullPath(mltFilePath)) ?? "";
+        MakeResourcePathsAbsolute(project, sourceDir);
+
+        var tempPath = tempManager.GetTempFilePath("melt_render", ".mlt");
+        await _xmlService.SerializeAsync(tempPath, project);
+
+        // Embed the avformat consumer as an XML element after the profile -
+        // the same document shape Shotcut hands to melt
+        InjectConsumerElement(tempPath, outputPath, settings);
+
+        Debug.WriteLine($"Created render XML: {tempPath}");
+        return tempPath;
+    }
+
+    private void ApplyTrackSelection(Mlt project, string? selectedVideoTracks, string? selectedAudioTracks)
+    {
         // Get all tracks (this already excludes system tracks from user selection)
         var tracks = _shotcutService.GetTracks(project);
 
@@ -261,24 +298,64 @@ public class MeltRenderService
 
             Debug.WriteLine($"Track {trackInfo.Index} ({trackInfo.Name}): hide={track.Hide ?? "none"}");
         }
+    }
 
-        // Render-only XML hardening (Shotcut does the same on export):
-        // autoclose frees file handles as the playlist advances - matters for
-        // randomized playlists with hundreds of clips
-        foreach (var playlist in project.Playlist)
+    /// <summary>
+    /// Rewrite relative media resources to absolute paths. Only paths that actually
+    /// resolve to an existing file are touched - pseudo-resources ("black", "color",
+    /// "%luma" names) stay as-is.
+    /// </summary>
+    private static void MakeResourcePathsAbsolute(Mlt project, string sourceDir)
+    {
+        foreach (var propertyList in project.Chain.Select(c => c.Property)
+                     .Append(project.Producer?.Property ?? []))
         {
-            playlist.Autoclose = "1";
+            var resource = propertyList.FirstOrDefault(p => p.Name == "resource");
+            if (resource == null || string.IsNullOrEmpty(resource.Text)
+                || Path.IsPathRooted(resource.Text)
+                || resource.Text.Contains("://"))
+            {
+                continue;
+            }
+
+            var absolutePath = Path.GetFullPath(Path.Combine(sourceDir, resource.Text));
+            if (File.Exists(absolutePath))
+            {
+                resource.Text = absolutePath;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Insert the avformat consumer element (with all encoding properties as attributes)
+    /// after the profile element - the document shape Shotcut hands to melt.
+    /// </summary>
+    private static void InjectConsumerElement(string renderXmlPath, string outputPath, MeltRenderSettings settings)
+    {
+        var document = System.Xml.Linq.XDocument.Load(renderXmlPath);
+        if (document.Root == null)
+            throw new InvalidOperationException("Render XML has no root element");
+
+        var consumer = new System.Xml.Linq.XElement("consumer",
+            new System.Xml.Linq.XAttribute("mlt_service", "avformat"),
+            new System.Xml.Linq.XAttribute("target", outputPath));
+
+        foreach (var (name, value) in BuildConsumerProperties(outputPath, settings))
+        {
+            consumer.SetAttributeValue(name, value);
         }
 
-        StripProxyResources(project);
+        var lastProfile = document.Root.Elements("profile").LastOrDefault();
+        if (lastProfile != null)
+        {
+            lastProfile.AddAfterSelf(consumer);
+        }
+        else
+        {
+            document.Root.AddFirst(consumer);
+        }
 
-        // Save modified project to a temporary file using TemporaryFileManager
-        var tempPath = tempManager.GetTempFilePath("melt_tracks", ".mlt");
-
-        await _xmlService.SerializeAsync(tempPath, project);
-        Debug.WriteLine($"Created temporary MLT with track selection: {tempPath}");
-
-        return tempPath;
+        document.Save(renderXmlPath);
     }
 
     /// <summary>
@@ -324,14 +401,28 @@ public class MeltRenderService
         return producerId.Equals("black", StringComparison.OrdinalIgnoreCase);
     }
 
-    private string BuildMeltArguments(string mltFile, string outputPath, MeltRenderSettings settings, int? inPoint = null, int? outPoint = null)
+    private string BuildMeltArguments(string renderXmlPath, MeltRenderSettings settings, int? inPoint = null, int? outPoint = null)
     {
-        var args = new List<string>();
+        var args = new List<string>
+        {
+            // -verbose makes failure logs actionable; -progress2 gives line-based
+            // progress on stderr; -abort stops on the first render error
+            "-verbose",
+            "-progress2",
+            "-abort"
+        };
 
-        // Input MLT file
-        args.Add($"\"{mltFile}\"");
+        // Producer URL, percent-encoded like Shotcut (survives &, #, spaces in paths).
+        // ?multi:1 engages the multi consumer, required when the output geometry or
+        // frame rate differs from the embedded project profile.
+        var producerUrl = $"xml:{Uri.EscapeDataString(renderXmlPath)}";
+        if (settings.Width.HasValue || settings.FrameRateNum.HasValue)
+        {
+            producerUrl += "?multi:1";
+        }
+        args.Add(producerUrl);
 
-        // In/Out points for partial rendering
+        // In/Out points bind to the producer (inclusive frame numbers)
         if (inPoint.HasValue)
         {
             args.Add($"in={inPoint.Value}");
@@ -344,23 +435,16 @@ public class MeltRenderService
             Debug.WriteLine($"Render ending at frame {outPoint.Value}");
         }
 
-        if (inPoint.HasValue && outPoint.HasValue)
-        {
-            var frameCount = outPoint.Value - inPoint.Value;
-            Debug.WriteLine($"Rendering {frameCount} frames (partial timeline)");
-        }
-        else if (!inPoint.HasValue && !outPoint.HasValue)
-        {
-            Debug.WriteLine("Rendering full timeline");
-        }
+        return string.Join(" ", args);
+    }
 
-        // Progress reporting (use -progress2 for line-by-line output);
-        // -verbose makes failure logs actionable
-        args.Add("-verbose");
-        args.Add("-progress2");
-
-        // Consumer and output
-        args.Add($"-consumer avformat:\"{outputPath}\"");
+    /// <summary>
+    /// All avformat consumer properties for this render, keyed for the consumer
+    /// XML element. Mirrors what Shotcut's export panel emits per encoder.
+    /// </summary>
+    private static Dictionary<string, string> BuildConsumerProperties(string outputPath, MeltRenderSettings settings)
+    {
+        var props = new Dictionary<string, string>();
 
         if (settings.PresetProperties is { Count: > 0 })
         {
@@ -369,142 +453,132 @@ public class MeltRenderService
             {
                 if (!presetKey.StartsWith("meta."))
                 {
-                    args.Add($"{presetKey}={presetValue}");
+                    props[presetKey] = presetValue;
                 }
             }
         }
         else
         {
-        // Video codec - CPU (libx264/libx265) or hardware (NVENC/QSV/AMF)
-        args.Add($"vcodec={settings.VideoCodec}");
+            // Video codec - CPU (libx264/libx265) or hardware (NVENC/QSV/AMF)
+            props["vcodec"] = settings.VideoCodec;
+            props["acodec"] = settings.AudioCodec;
 
-        // Audio codec
-        args.Add($"acodec={settings.AudioCodec}");
+            // Quality - each encoder family takes a different property
+            if (settings.Crf.HasValue)
+            {
+                if (settings.VideoCodec.Contains("nvenc"))
+                {
+                    props["rc"] = "vbr";
+                    props["cq"] = settings.Crf.Value.ToString();
+                }
+                else if (settings.VideoCodec.Contains("qsv"))
+                {
+                    // Shotcut emits MLT's qscale (min 1), not the raw global_quality AVOption
+                    props["qscale"] = Math.Max(1, settings.Crf.Value).ToString();
+                }
+                else if (settings.VideoCodec.Contains("amf"))
+                {
+                    props["rc"] = "cqp";
+                    props["qp_i"] = settings.Crf.Value.ToString();
+                    props["qp_p"] = settings.Crf.Value.ToString();
+                    props["qp_b"] = settings.Crf.Value.ToString();
+                }
+                else if (settings.VideoCodec == "libx265")
+                {
+                    // x265 wants its options via x265-params (Shotcut sets both)
+                    props["x265-params"] = $"crf={settings.Crf.Value}";
+                    props["crf"] = settings.Crf.Value.ToString();
+                }
+                else
+                {
+                    props["crf"] = settings.Crf.Value.ToString();
+                }
+            }
 
-        // Quality settings - each encoder family takes a different property
-        // (verified against Shotcut's encodedock.cpp emissions per encoder)
-        if (settings.Crf.HasValue)
-        {
-            if (settings.VideoCodec.Contains("nvenc"))
+            // Encoding preset only applies to the CPU x264/x265 encoders
+            if (!string.IsNullOrEmpty(settings.Preset) && settings.VideoCodec.StartsWith("libx"))
             {
-                args.Add("rc=vbr");
-                args.Add($"cq={settings.Crf.Value}");
+                props["preset"] = settings.Preset;
             }
-            else if (settings.VideoCodec.Contains("qsv"))
-            {
-                // Shotcut emits MLT's qscale (min 1), not the raw global_quality AVOption
-                args.Add($"qscale={Math.Max(1, settings.Crf.Value)}");
-            }
-            else if (settings.VideoCodec.Contains("amf"))
-            {
-                args.Add("rc=cqp");
-                args.Add($"qp_i={settings.Crf.Value}");
-                args.Add($"qp_p={settings.Crf.Value}");
-                args.Add($"qp_b={settings.Crf.Value}");
-            }
-            else if (settings.VideoCodec == "libx265")
-            {
-                // x265 wants its options via x265-params; the bare crf is kept alongside
-                // for readability (Shotcut sets both)
-                args.Add($"x265-params=crf={settings.Crf.Value}");
-                args.Add($"crf={settings.Crf.Value}");
-            }
-            else
-            {
-                args.Add($"crf={settings.Crf.Value}");
-            }
-        }
 
-        // Encoding preset only applies to the CPU x264/x265 encoders;
-        // hardware encoders use their own driver-managed presets
-        if (!string.IsNullOrEmpty(settings.Preset) && settings.VideoCodec.StartsWith("libx"))
-        {
-            args.Add($"preset={settings.Preset}");
-        }
-
-        // GOP / B-frames (Shotcut parity: g=round(fps*5), bf=3, bf=0 for some hw encoders)
-        if (settings.Gop.HasValue)
-        {
-            args.Add($"g={settings.Gop.Value}");
-        }
-        if (settings.BFrames.HasValue)
-        {
-            args.Add($"bf={settings.BFrames.Value}");
-        }
-
-        // Codec threads: MLT's default is 1(!). 0 = codec auto for x264/x265;
-        // hardware encoders get cores-1 like Shotcut does
-        args.Add(settings.VideoCodec.StartsWith("libx")
-            ? "threads=0"
-            : $"threads={Math.Max(1, Environment.ProcessorCount - 1)}");
-
-        // Audio: quality-based VBR (aq, codec-specific scale) takes precedence over
-        // average bitrate; FLAC is lossless so neither applies. The vbr marker
-        // matches Shotcut (on for quality mode, constrained for average bitrate)
-        if (settings.AudioCodec != "flac")
-        {
-            if (settings.AudioQuality.HasValue)
+            // GOP / B-frames (Shotcut parity)
+            if (settings.Gop.HasValue)
             {
-                args.Add("vbr=on");
-                args.Add($"aq={settings.AudioQuality.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+                props["g"] = settings.Gop.Value.ToString();
             }
-            else if (!string.IsNullOrEmpty(settings.AudioBitrate))
+            if (settings.BFrames.HasValue)
             {
-                args.Add("vbr=constrained");
-                args.Add($"ab={settings.AudioBitrate}");
+                props["bf"] = settings.BFrames.Value.ToString();
             }
-        }
 
-        // MP4 optimization (presets carry their own movflags)
-        if (outputPath.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
-        {
-            args.Add("movflags=+faststart"); // Enable web streaming
-        }
+            // Codec threads: MLT's default is 1(!). 0 = codec auto for x264/x265;
+            // hardware encoders get cores-1 like Shotcut does
+            props["threads"] = settings.VideoCodec.StartsWith("libx")
+                ? "0"
+                : Math.Max(1, Environment.ProcessorCount - 1).ToString();
+
+            // Audio: quality-based VBR takes precedence over average bitrate;
+            // FLAC is lossless so neither applies
+            if (settings.AudioCodec != "flac")
+            {
+                if (settings.AudioQuality.HasValue)
+                {
+                    props["vbr"] = "on";
+                    props["aq"] = settings.AudioQuality.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                }
+                else if (!string.IsNullOrEmpty(settings.AudioBitrate))
+                {
+                    props["vbr"] = "constrained";
+                    props["ab"] = settings.AudioBitrate;
+                }
+            }
+
+            // MP4 optimization (presets carry their own movflags)
+            if (outputPath.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
+            {
+                props["movflags"] = "+faststart";
+            }
         }
 
         // Scaling/deinterlacing quality - Shotcut's defaults; MLT's own differ
-        args.Add("rescale=bilinear");
-        args.Add("deinterlacer=bwdif");
+        props["rescale"] = "bilinear";
+        props["deinterlacer"] = "bwdif";
 
-        // Optional output profile overrides (default: the project profile) - the same
-        // consumer properties Shotcut's export panel emits
+        // Optional output profile overrides (default: the project profile)
         if (settings.Width.HasValue && settings.Height.HasValue)
         {
-            args.Add($"width={settings.Width.Value}");
-            args.Add($"height={settings.Height.Value}");
+            props["width"] = settings.Width.Value.ToString();
+            props["height"] = settings.Height.Value.ToString();
 
             var darNum = settings.DisplayAspectNum ?? settings.Width.Value;
             var darDen = settings.DisplayAspectDen ?? settings.Height.Value;
-            args.Add($"display_aspect_num={darNum}");
-            args.Add($"display_aspect_den={darDen}");
+            props["display_aspect_num"] = darNum.ToString();
+            props["display_aspect_den"] = darDen.ToString();
 
             // Pixel (sample) aspect = DAR / (W/H), reduced
             var sarNum = darNum * settings.Height.Value;
             var sarDen = darDen * settings.Width.Value;
             var divisor = Gcd(sarNum, sarDen);
-            args.Add($"sample_aspect_num={sarNum / divisor}");
-            args.Add($"sample_aspect_den={sarDen / divisor}");
+            props["sample_aspect_num"] = (sarNum / divisor).ToString();
+            props["sample_aspect_den"] = (sarDen / divisor).ToString();
         }
 
         if (settings.FrameRateNum.HasValue)
         {
-            args.Add($"frame_rate_num={settings.FrameRateNum.Value}");
-            args.Add($"frame_rate_den={settings.FrameRateDen ?? 1}");
+            props["frame_rate_num"] = settings.FrameRateNum.Value.ToString();
+            props["frame_rate_den"] = (settings.FrameRateDen ?? 1).ToString();
         }
 
         // CRITICAL: negative real_time disables frame dropping (required for file
-        // rendering). These are MLT frame-processing threads, each holding full frame
-        // buffers - Shotcut caps them at 4 to avoid OOM/artifacts on many-core boxes
+        // rendering). MLT frame-processing threads capped at 4 like Shotcut - each
+        // holds full frame buffers and more risks OOM/artifacts
         var threadCount = settings.ThreadCount > 0
             ? settings.ThreadCount
             : Environment.ProcessorCount;
         threadCount = Math.Clamp(threadCount, 1, 4);
+        props["real_time"] = $"-{threadCount}";
 
-        args.Add($"real_time=-{threadCount}");
-
-        Debug.WriteLine($"Using {threadCount} MLT processing threads");
-
-        return string.Join(" ", args);
+        return props;
     }
 
     private static int Gcd(int a, int b) => b == 0 ? a : Gcd(b, a % b);

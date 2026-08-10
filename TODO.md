@@ -36,8 +36,6 @@ _Nothing planned._
 
 ## Future
 
-- [ ] (2026-08-10) Adopt Shotcut's melt invocation shape: consumer as XML element, percent-encoded xml: URL, ?multi:1 when overriding resolution/fps, absolute-path render XML in system temp [audit]
-  - Shotcut encodedock.cpp:1366,1622; meltjob.cpp:131-176 — current consumer-args approach works but diverges
 - [ ] (2026-08-09) Fold Core project into main project (or strip to plain Sdk); split not earning its keep [audit]
 - [ ] (2026-08-09) Add @key to RenderQueue job list foreach; skip 5s poll when paused and idle [audit]
 - [ ] (2026-08-09) Temp .mlt files accumulate beside source project on every Add to Queue — add cleanup [audit]
@@ -51,6 +49,9 @@ _Nothing planned._
 
 ## Done
 
+- [x] (2026-08-10 → 2026-08-10) Show app version at the bottom of the nav drawer (CheapClerk pattern) [user]
+- [x] (2026-08-10 → 2026-08-10) Adopt Shotcut's melt invocation shape: consumer as XML element, percent-encoded xml: URL, ?multi:1 when overriding resolution/fps, absolute-path render XML in system temp [audit]
+  - Shotcut encodedock.cpp:1366,1622; meltjob.cpp:131-176 — current consumer-args approach works but diverges
 - [x] (2026-08-10 → 2026-08-10) Ship MLT's stock export presets (YouTube etc.) — parse key=value files from <melt>/../share/mlt/presets/consumer/avformat [audit]
 - [x] (2026-08-10 → 2026-08-10) True pause/resume of running renders via NtSuspendProcess/NtResumeProcess instead of kill+restart [audit]
 - [x] (2026-08-10 → 2026-08-10) Retry failed renders once with real_time=-1 (parallel processing is the most common melt failure mode) [audit]
