@@ -76,4 +76,21 @@ public class MeltRenderSettings
     /// </summary>
     public int? FrameRateNum { get; set; }
     public int? FrameRateDen { get; set; }
+
+    /// <summary>
+    /// GOP size (keyframe interval, frames). Shotcut default: round(fps * 5).
+    /// </summary>
+    public int? Gop { get; set; }
+
+    /// <summary>
+    /// B-frames between reference frames. Shotcut default: 3 (0 for hevc_nvenc/hevc_amf).
+    /// </summary>
+    public int? BFrames { get; set; }
+
+    /// <summary>
+    /// Stock MLT export preset properties (key=value consumer properties).
+    /// When set, these govern format/codec/quality and the manual codec settings
+    /// above are not emitted. Resolution/frame-rate overrides still apply.
+    /// </summary>
+    public Dictionary<string, string>? PresetProperties { get; set; }
 }

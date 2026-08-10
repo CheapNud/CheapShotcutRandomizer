@@ -40,6 +40,8 @@ class Program
         builder.Services.AddSingleton<SettingsService>();
         builder.Services.AddSingleton<ProjectStateService>(); // Singleton to persist across page navigation
         builder.Services.AddSingleton<RenderJobDraftService>(); // Carries drafts from Randomizer to the add-job stepper
+        builder.Services.AddSingleton<RenderProcessRegistry>(); // In-place pause/resume of melt processes
+        builder.Services.AddSingleton<ExportPresetService>();   // Stock MLT export presets (YouTube etc.)
         builder.Services.AddScoped<IXmlService, XmlService>();
         builder.Services.AddScoped<ShotcutService>();
         builder.Services.AddScoped<FileSearchService>();
