@@ -5,8 +5,10 @@
 @using CheapHelpers.MediaProcessing.Services
 @inject IDesktopInteropService DesktopInterop
 @inject HardwareDetectionService HardwareService
+@inject ExecutableDetectionService ExecutableDetection
 @inject ShotcutService ShotcutService
 @inject CheapShotcutRandomizer.Services.SettingsService SettingsService
+@inject CheapShotcutRandomizer.Services.ExportPresetService PresetService
 @inject RenderJobDraftService Draft
 @inject IRenderQueueService QueueService
 @inject NavigationManager Nav
@@ -55,6 +57,36 @@
 
         <MudStep Title="Video" SecondaryText="Encoder & quality">
             <MudGrid Spacing="2" Class="pa-2">
+                @if (_presets.Count > 0)
+                {
+                    <MudItem xs="12">
+                        <MudSelect @bind-Value="_selectedPresetKey"
+                                   @bind-Value:after="OnPresetChanged"
+                                   Label="Export Preset"
+                                   Variant="Variant.Outlined"
+                                   T="string"
+                                   Margin="Margin.Dense"
+                                   HelperText="Stock MLT/Shotcut presets — Custom exposes the manual encoder settings">
+                            <MudSelectItem Value="@("")" T="string">Custom (manual settings)</MudSelectItem>
+                            @foreach (var preset in _presets)
+                            {
+                                <MudSelectItem Value="@preset.Key" T="string">@preset.DisplayName</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                }
+
+                @if (SelectedPreset != null)
+                {
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Info" Dense="true">
+                            <strong>@SelectedPreset.DisplayName</strong>@(string.IsNullOrEmpty(SelectedPreset.Note) ? "" : $" — {SelectedPreset.Note}").
+                            The preset governs format, codec and quality; resolution/frame-rate overrides below still apply.
+                        </MudAlert>
+                    </MudItem>
+                }
+                else
+                {
                 <MudItem xs="12" md="6">
                     <MudSelect @bind-Value="_mltVideoCodec"
                                Label="Encoder"
@@ -96,6 +128,7 @@
                         </MudText>
                     }
                 </MudItem>
+                }
                 <MudItem xs="12" md="4">
                     <MudSelect @bind-Value="_mltResolution"
                                Label="Resolution"
@@ -141,6 +174,8 @@
                         <MudSelectItem Value="@("60")" T="string">60 fps</MudSelectItem>
                     </MudSelect>
                 </MudItem>
+                @if (SelectedPreset == null)
+                {
                 <MudItem xs="12">
                     <MudSlider @bind-Value="_mltCrf"
                                Min="15"
@@ -150,6 +185,7 @@
                         Quality (@QualityLabel): @_mltCrf — lower is better
                     </MudSlider>
                 </MudItem>
+                }
                 <MudItem xs="12">
                     <MudSlider @bind-Value="_mltThreads"
                                Min="1"
@@ -167,6 +203,14 @@
         </MudStep>
 
         <MudStep Title="Audio" SecondaryText="Codec & bitrate">
+            @if (SelectedPreset != null)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="ma-2">
+                    Audio is governed by the <strong>@SelectedPreset.DisplayName</strong> preset.
+                </MudAlert>
+            }
+            else
+            {
             <MudGrid Spacing="2" Class="pa-2">
                 <MudItem xs="12" md="4">
                     <MudSelect @bind-Value="_mltAudioCodec"
@@ -222,6 +266,7 @@
                     }
                 </MudItem>
             </MudGrid>
+            }
         </MudStep>
 
         <MudStep Title="Tracks & Range" SecondaryText="What to render">
@@ -321,13 +366,32 @@
 
         <MudStep Title="Review" SecondaryText="Add to queue">
             <MudStack Spacing="2" Class="pa-2">
+                @foreach (var preflightError in _preflightErrors)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@preflightError</MudAlert>
+                }
+                @foreach (var preflightWarning in _preflightWarnings)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">@preflightWarning</MudAlert>
+                }
+
                 <MudSimpleTable Dense="true" Bordered="false" Striped="true">
                     <tbody>
                         <tr><td><strong>Source</strong></td><td>@Path.GetFileName(_sourcePath)</td></tr>
                         <tr><td><strong>Output</strong></td><td>@_outputPath</td></tr>
-                        <tr><td><strong>Video</strong></td><td>@_mltVideoCodec · @QualityLabel @_mltCrf@(IsCpuCodec ? $" · {_mltPreset}" : "")</td></tr>
+                        @if (SelectedPreset != null)
+                        {
+                            <tr><td><strong>Preset</strong></td><td>@SelectedPreset.DisplayName</td></tr>
+                        }
+                        else
+                        {
+                            <tr><td><strong>Video</strong></td><td>@_mltVideoCodec · @QualityLabel @_mltCrf@(IsCpuCodec ? $" · {_mltPreset}" : "")</td></tr>
+                        }
                         <tr><td><strong>Profile</strong></td><td>@(string.IsNullOrEmpty(_mltResolution) ? "Project default" : $"{_mltResolution} ({_mltAspect})") · @(string.IsNullOrEmpty(_mltFps) ? "project fps" : $"{_mltFps} fps")</td></tr>
+                        @if (SelectedPreset == null)
+                        {
                         <tr><td><strong>Audio</strong></td><td>@_mltAudioCodec · @(UseAudioVbr ? $"VBR q{_mltAudioQuality}" : _mltAudioCodec == "flac" ? "lossless" : _mltAudioBitrate)</td></tr>
+                        }
                         <tr><td><strong>Tracks</strong></td><td>@_videoTracks.Count(t => t.Selected) video / @_audioTracks.Count(t => t.Selected) audio selected</td></tr>
                         <tr><td><strong>Range</strong></td><td>@(_useCustomRange ? $"{(_inPointTimecode == "" ? "start" : _inPointTimecode)} → {(_outPointTimecode == "" ? "end" : _outPointTimecode)}" : string.IsNullOrEmpty(_renderRangeDescription) ? "Full timeline" : _renderRangeDescription)</td></tr>
                     </tbody>
@@ -373,6 +437,16 @@
     private string _validationError = string.Empty;
     private HardwareCapabilities? _hardware;
     private AppSettings? _appSettings;
+
+    // Stock MLT export presets
+    private List<CheapShotcutRandomizer.Services.ExportPreset> _presets = [];
+    private string _selectedPresetKey = "";
+    private CheapShotcutRandomizer.Services.ExportPreset? SelectedPreset =>
+        _presets.FirstOrDefault(p => p.Key == _selectedPresetKey);
+
+    // Pre-flight results shown on the Review step
+    private List<string> _preflightErrors = [];
+    private List<string> _preflightWarnings = [];
 
     // Track selection
     private List<SelectableTrack> _tracks = [];
@@ -468,6 +542,10 @@
         var videosFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
         _outputPath = Path.Combine(videosFolder, "output.mp4");
 
+        // Discover the stock MLT export presets shipped next to melt
+        var meltPath = ExecutableDetection.DetectMelt(_appSettings.MeltPath);
+        _presets = PresetService.LoadPresets(meltPath);
+
         // A draft from the Randomizer flows pre-fills the source
         if (!string.IsNullOrEmpty(Draft.SourcePath))
         {
@@ -494,12 +572,95 @@
             return;
         }
 
+        // Entering the Review step runs the pre-flight checks
+        if (args.StepIndex == 4 && args.Action == StepAction.Activate)
+        {
+            await RunPreflightChecksAsync();
+        }
+
         // Completing the final (Review) step adds the job
         if (args.StepIndex == 4 && args.Action == StepAction.Complete)
         {
             args.Cancel = true; // we navigate away ourselves on success
+            if (_preflightErrors.Count > 0)
+            {
+                Snackbar.Add("Fix the errors above before adding the job", Severity.Error);
+                return;
+            }
             await AddJobAsync();
         }
+    }
+
+    private void OnPresetChanged()
+    {
+        // Presets carry their own container format - keep the output extension in sync
+        var extension = SelectedPreset?.Extension;
+        if (!string.IsNullOrEmpty(extension) && !string.IsNullOrEmpty(_outputPath))
+        {
+            _outputPath = Path.ChangeExtension(_outputPath, extension);
+        }
+    }
+
+    private async Task RunPreflightChecksAsync()
+    {
+        _preflightErrors = [];
+        _preflightWarnings = [];
+
+        // Media files referenced by the project must exist (catches moved/renamed sources
+        // before the render fails at 3am, not after)
+        if (_loadedMltProject != null && !string.IsNullOrEmpty(_sourcePath))
+        {
+            var projectDir = Path.GetDirectoryName(_sourcePath) ?? "";
+            var missing = _loadedMltProject.Chain
+                .Select(c => c.Property.FirstOrDefault(p => p.Name == "resource")?.Text)
+                .Where(resource => !string.IsNullOrEmpty(resource)
+                    && !resource.StartsWith('%')
+                    && !resource.Contains("://")
+                    && resource is not ("color" or "colour"))
+                .Select(resource => Path.IsPathRooted(resource!) ? resource! : Path.Combine(projectDir, resource!))
+                .Where(fullPath => !File.Exists(fullPath))
+                .Take(5)
+                .ToList();
+
+            foreach (var missingFile in missing)
+            {
+                _preflightErrors.Add($"Missing media file: {missingFile}");
+            }
+        }
+
+        // Duplicate output target among unfinished jobs corrupts the output
+        try
+        {
+            var activeJobs = await QueueService.GetActiveJobsAsync();
+            if (activeJobs.Any(j => string.Equals(j.OutputPath, _outputPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                _preflightErrors.Add($"Another queued job is already writing to {_outputPath}");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Duplicate-target check failed: {ex.Message}");
+        }
+
+        // Low disk space on the output drive
+        try
+        {
+            var outputRoot = Path.GetPathRoot(Path.GetFullPath(_outputPath));
+            if (outputRoot != null)
+            {
+                var freeGb = new DriveInfo(outputRoot).AvailableFreeSpace / 1_073_741_824.0;
+                if (freeGb < 2)
+                {
+                    _preflightWarnings.Add($"Low disk space on {outputRoot}: {freeGb:F1} GB free");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Disk-space check failed: {ex.Message}");
+        }
+
+        StateHasChanged();
     }
 
     private async Task BrowseSource()
@@ -817,6 +978,22 @@
         {
             renderJob.MeltSettings.FrameRateNum = frameRate.Num;
             renderJob.MeltSettings.FrameRateDen = frameRate.Den;
+        }
+
+        if (SelectedPreset != null)
+        {
+            // Stock MLT preset governs format/codec/quality wholesale
+            renderJob.MeltSettings.PresetProperties = SelectedPreset.ConsumerProperties;
+        }
+        else
+        {
+            // GOP parity with Shotcut: keyframe every ~5s, 3 B-frames
+            // (0 for hardware HEVC encoders which reject B-frames)
+            var outputFps = FrameRates.TryGetValue(_mltFps, out var fpsOverride)
+                ? (double)fpsOverride.Num / fpsOverride.Den
+                : _loadedMltProject?.GetFrameRate() ?? 25;
+            renderJob.MeltSettings.Gop = (int)Math.Round(outputFps * 5);
+            renderJob.MeltSettings.BFrames = _mltVideoCodec is "hevc_nvenc" or "hevc_amf" ? 0 : 3;
         }
 
         // Store frame rate for timecode conversion

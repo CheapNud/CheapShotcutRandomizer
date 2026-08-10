@@ -46,7 +46,9 @@ public class MeltRenderService
         int? inPoint = null,
         int? outPoint = null,
         string? selectedVideoTracks = null,
-        string? selectedAudioTracks = null)
+        string? selectedAudioTracks = null,
+        Guid? jobId = null,
+        RenderProcessRegistry? processRegistry = null)
     {
         if (settings == null)
         {
@@ -131,6 +133,12 @@ public class MeltRenderService
             // Keep the machine usable while a batch renders in the background
             try { process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
 
+            // Register for in-place pause/resume (process suspension)
+            if (jobId.HasValue && processRegistry != null)
+            {
+                processRegistry.Register(jobId.Value, process);
+            }
+
             // Registered after Start so the callback can never run against an unstarted process
             using var cancelRegistration = cancellationToken.Register(() =>
             {
@@ -162,6 +170,11 @@ public class MeltRenderService
         }
         finally
         {
+            if (jobId.HasValue && processRegistry != null)
+            {
+                processRegistry.Unregister(jobId.Value);
+            }
+
             // Temp file cleanup handled by TemporaryFileManager
             tempManager?.Dispose();
         }
@@ -249,6 +262,16 @@ public class MeltRenderService
             Debug.WriteLine($"Track {trackInfo.Index} ({trackInfo.Name}): hide={track.Hide ?? "none"}");
         }
 
+        // Render-only XML hardening (Shotcut does the same on export):
+        // autoclose frees file handles as the playlist advances - matters for
+        // randomized playlists with hundreds of clips
+        foreach (var playlist in project.Playlist)
+        {
+            playlist.Autoclose = "1";
+        }
+
+        StripProxyResources(project);
+
         // Save modified project to a temporary file using TemporaryFileManager
         var tempPath = tempManager.GetTempFilePath("melt_tracks", ".mlt");
 
@@ -256,6 +279,33 @@ public class MeltRenderService
         Debug.WriteLine($"Created temporary MLT with track selection: {tempPath}");
 
         return tempPath;
+    }
+
+    /// <summary>
+    /// If a producer still points at a Shotcut proxy (shotcut:proxy is set), restore the
+    /// original file from shotcut:resource so the render never silently uses 540p proxies.
+    /// Normal Shotcut saves are already clean; this guards against export-temp leftovers.
+    /// </summary>
+    private static void StripProxyResources(Mlt project)
+    {
+        foreach (var propertyList in project.Chain.Select(c => c.Property)
+                     .Append(project.Producer?.Property ?? []))
+        {
+            var proxyMarker = propertyList.FirstOrDefault(p => p.Name == "shotcut:proxy");
+            if (proxyMarker == null)
+                continue;
+
+            var originalResource = propertyList.FirstOrDefault(p => p.Name == "shotcut:resource")?.Text;
+            var resource = propertyList.FirstOrDefault(p => p.Name == "resource");
+
+            if (resource != null && !string.IsNullOrEmpty(originalResource))
+            {
+                Debug.WriteLine($"Restoring proxied resource to original: {originalResource}");
+                resource.Text = originalResource;
+            }
+
+            propertyList.RemoveAll(p => p.Name is "shotcut:proxy" or "shotcut:resource");
+        }
     }
 
     /// <summary>
@@ -304,12 +354,27 @@ public class MeltRenderService
             Debug.WriteLine("Rendering full timeline");
         }
 
-        // Progress reporting (use -progress2 for line-by-line output)
+        // Progress reporting (use -progress2 for line-by-line output);
+        // -verbose makes failure logs actionable
+        args.Add("-verbose");
         args.Add("-progress2");
 
         // Consumer and output
         args.Add($"-consumer avformat:\"{outputPath}\"");
 
+        if (settings.PresetProperties is { Count: > 0 })
+        {
+            // A stock MLT export preset governs format/codec/quality wholesale
+            foreach (var (presetKey, presetValue) in settings.PresetProperties)
+            {
+                if (!presetKey.StartsWith("meta."))
+                {
+                    args.Add($"{presetKey}={presetValue}");
+                }
+            }
+        }
+        else
+        {
         // Video codec - CPU (libx264/libx265) or hardware (NVENC/QSV/AMF)
         args.Add($"vcodec={settings.VideoCodec}");
 
@@ -357,15 +422,21 @@ public class MeltRenderService
             args.Add($"preset={settings.Preset}");
         }
 
+        // GOP / B-frames (Shotcut parity: g=round(fps*5), bf=3, bf=0 for some hw encoders)
+        if (settings.Gop.HasValue)
+        {
+            args.Add($"g={settings.Gop.Value}");
+        }
+        if (settings.BFrames.HasValue)
+        {
+            args.Add($"bf={settings.BFrames.Value}");
+        }
+
         // Codec threads: MLT's default is 1(!). 0 = codec auto for x264/x265;
         // hardware encoders get cores-1 like Shotcut does
         args.Add(settings.VideoCodec.StartsWith("libx")
             ? "threads=0"
             : $"threads={Math.Max(1, Environment.ProcessorCount - 1)}");
-
-        // Scaling/deinterlacing quality - Shotcut's defaults; MLT's own differ
-        args.Add("rescale=bilinear");
-        args.Add("deinterlacer=bwdif");
 
         // Audio: quality-based VBR (aq, codec-specific scale) takes precedence over
         // average bitrate; FLAC is lossless so neither applies. The vbr marker
@@ -383,6 +454,17 @@ public class MeltRenderService
                 args.Add($"ab={settings.AudioBitrate}");
             }
         }
+
+        // MP4 optimization (presets carry their own movflags)
+        if (outputPath.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
+        {
+            args.Add("movflags=+faststart"); // Enable web streaming
+        }
+        }
+
+        // Scaling/deinterlacing quality - Shotcut's defaults; MLT's own differ
+        args.Add("rescale=bilinear");
+        args.Add("deinterlacer=bwdif");
 
         // Optional output profile overrides (default: the project profile) - the same
         // consumer properties Shotcut's export panel emits
@@ -421,12 +503,6 @@ public class MeltRenderService
         args.Add($"real_time=-{threadCount}");
 
         Debug.WriteLine($"Using {threadCount} MLT processing threads");
-
-        // MP4 optimization
-        if (outputPath.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
-        {
-            args.Add("movflags=+faststart"); // Enable web streaming
-        }
 
         return string.Join(" ", args);
     }

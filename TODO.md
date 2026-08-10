@@ -38,14 +38,6 @@ _Nothing planned._
 
 - [ ] (2026-08-10) Adopt Shotcut's melt invocation shape: consumer as XML element, percent-encoded xml: URL, ?multi:1 when overriding resolution/fps, absolute-path render XML in system temp [audit]
   - Shotcut encodedock.cpp:1366,1622; meltjob.cpp:131-176 — current consumer-args approach works but diverges
-- [ ] (2026-08-10) Ship MLT's stock export presets (YouTube etc.) — parse key=value files from <melt>/../share/mlt/presets/consumer/avformat [audit]
-- [ ] (2026-08-10) True pause/resume of running renders via NtSuspendProcess/NtResumeProcess instead of kill+restart [audit]
-- [ ] (2026-08-10) Retry failed renders once with real_time=-1 (parallel processing is the most common melt failure mode) [audit]
-- [ ] (2026-08-10) Pre-flight checks at enqueue: missing source files, output-inside-project, self-inclusion, low disk, duplicate output target [audit]
-- [ ] (2026-08-10) Set autoclose=1 on playlists in render-only temp XML (frees file handles on long playlists) [audit]
-- [ ] (2026-08-10) Strip shotcut:proxy resources + stale consumer elements from input XML before render (proxy-contamination guard) [audit]
-- [ ] (2026-08-10) ETA: baseline stopwatch at first progress percent, hide estimate below 2%; add -verbose to melt + per-job log capture; keep-awake (SetThreadExecutionState) during renders [audit]
-- [ ] (2026-08-10) GOP parity: g=round(fps*5), bf=3, bf=0 for hevc_nvenc/hevc_amf [audit]
 - [ ] (2026-08-09) Fold Core project into main project (or strip to plain Sdk); split not earning its keep [audit]
 - [ ] (2026-08-09) Add @key to RenderQueue job list foreach; skip 5s poll when paused and idle [audit]
 - [ ] (2026-08-09) Temp .mlt files accumulate beside source project on every Add to Queue — add cleanup [audit]
@@ -59,6 +51,14 @@ _Nothing planned._
 
 ## Done
 
+- [x] (2026-08-10 → 2026-08-10) Ship MLT's stock export presets (YouTube etc.) — parse key=value files from <melt>/../share/mlt/presets/consumer/avformat [audit]
+- [x] (2026-08-10 → 2026-08-10) True pause/resume of running renders via NtSuspendProcess/NtResumeProcess instead of kill+restart [audit]
+- [x] (2026-08-10 → 2026-08-10) Retry failed renders once with real_time=-1 (parallel processing is the most common melt failure mode) [audit]
+- [x] (2026-08-10 → 2026-08-10) Pre-flight checks at enqueue: missing source files, output-inside-project, self-inclusion, low disk, duplicate output target [audit]
+- [x] (2026-08-10 → 2026-08-10) Set autoclose=1 on playlists in render-only temp XML (frees file handles on long playlists) [audit]
+- [x] (2026-08-10 → 2026-08-10) Strip shotcut:proxy resources + stale consumer elements from input XML before render (proxy-contamination guard) [audit]
+- [x] (2026-08-10 → 2026-08-10) ETA: baseline stopwatch at first progress percent, hide estimate below 2%; add -verbose to melt + per-job log capture; keep-awake (SetThreadExecutionState) during renders [audit]
+- [x] (2026-08-10 → 2026-08-10) GOP parity: g=round(fps*5), bf=3, bf=0 for hevc_nvenc/hevc_amf [audit]
 - [x] (2026-08-10 → 2026-08-10) UI restructure: queue is the home page, Add Files goes to a full-page stepper, Randomizer and Find Files get their own nav tabs, popup dialog deleted [user]
 - [x] (2026-08-10 → 2026-08-10) Respect settings: MaxConcurrentRenders, AutoStartQueue, ShowNotificationsOnComplete now wired; dead DefaultQuality knob removed [user]
 - [x] (2026-08-10 → 2026-08-10) Melt parity from Shotcut source research: qscale for QSV, qp_b for AMF, x265-params, audio vbr markers, codec threads, rescale/deinterlacer, real_time cap 4, BelowNormal priority [audit]

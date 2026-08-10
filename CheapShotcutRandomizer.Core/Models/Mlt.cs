@@ -145,6 +145,15 @@ public class Playlist
     public bool ShouldSerializeTitle() => !string.IsNullOrEmpty(Title);
 
     /// <summary>
+    /// "1" lets MLT close each producer's file handles once the playlist has moved
+    /// past it - set on render-only XML (Shotcut does the same on export)
+    /// </summary>
+    [XmlAttribute(AttributeName = "autoclose")]
+    public string? Autoclose { get; set; }
+
+    public bool ShouldSerializeAutoclose() => !string.IsNullOrEmpty(Autoclose);
+
+    /// <summary>
     /// Get ordered timeline items (Entry and Blank in sequential order)
     /// </summary>
     [XmlIgnore]

@@ -127,6 +127,9 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
     {
         Debug.WriteLine("=== RenderQueueService: Graceful shutdown initiated ===");
 
+        // Thaw any suspended melt processes so cancellation can terminate them
+        _serviceProvider.GetService<RenderProcessRegistry>()?.ResumeAll();
+
         // Cancel all running jobs
         List<Guid> runningJobIds;
         lock (_runningJobsLock)
@@ -299,6 +302,9 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
         if (renderJob == null)
             return false;
 
+        // A suspended process must be thawed first or the graceful shutdown can't reach it
+        _serviceProvider.GetService<RenderProcessRegistry>()?.TryResume(jobId);
+
         // Cancel running job
         lock (_runningJobsLock)
         {
@@ -329,13 +335,23 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
         if (renderJob == null || renderJob.Status != RenderJobStatus.Running)
             return false;
 
-        // Cancel the running job (will be handled as pause)
-        lock (_runningJobsLock)
+        // Preferred: freeze the melt process in place so no progress is lost.
+        // The CTS and concurrency slot stay held - resume just thaws the process.
+        var registry = _serviceProvider.GetService<RenderProcessRegistry>();
+        if (registry != null && registry.TrySuspend(jobId))
         {
-            if (_runningJobs.TryGetValue(jobId, out var cts))
+            Debug.WriteLine($"Suspended melt process for job {jobId}");
+        }
+        else
+        {
+            // Fallback (process not started yet / registry missing): kill-based pause
+            lock (_runningJobsLock)
             {
-                cts.Cancel();
-                _runningJobs.Remove(jobId);
+                if (_runningJobs.TryGetValue(jobId, out var cts))
+                {
+                    cts.Cancel();
+                    _runningJobs.Remove(jobId);
+                }
             }
         }
 
@@ -357,7 +373,20 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
         if (renderJob == null || renderJob.Status != RenderJobStatus.Paused)
             return false;
 
-        // Reset to pending and re-enqueue
+        // Preferred: thaw the suspended melt process and continue where it left off
+        var registry = _serviceProvider.GetService<RenderProcessRegistry>();
+        if (registry != null && registry.TryResume(jobId))
+        {
+            renderJob.Status = RenderJobStatus.Running;
+            await repository.UpdateAsync(renderJob);
+
+            FireStatusChanged(jobId, RenderJobStatus.Running, renderJob.ProgressPercentage, renderJob.CurrentFrame);
+
+            Debug.WriteLine($"Resumed suspended melt process for job {jobId}");
+            return true;
+        }
+
+        // Fallback (paused via kill or app was restarted): re-enqueue from scratch
         renderJob.Status = RenderJobStatus.Pending;
         await repository.UpdateAsync(renderJob);
 
@@ -563,6 +592,24 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
                 }
                 else
                 {
+                    // Retry in safe mode: parallel frame processing (real_time < -1) is
+                    // the most common melt failure cause, so force single-threaded MLT
+                    // processing on the retry (encoder threads are unaffected)
+                    try
+                    {
+                        var retrySettings = JsonSerializer.Deserialize<MeltRenderSettings>(renderJob.RenderSettings);
+                        if (retrySettings != null && retrySettings.ThreadCount != 1)
+                        {
+                            retrySettings.ThreadCount = 1;
+                            renderJob.RenderSettings = JsonSerializer.Serialize(retrySettings);
+                            Debug.WriteLine($"Job {jobId} retry will run with single-threaded MLT processing");
+                        }
+                    }
+                    catch (Exception settingsEx)
+                    {
+                        Debug.WriteLine($"Could not adjust retry settings: {settingsEx.Message}");
+                    }
+
                     // Retry with exponential backoff
                     renderJob.Status = RenderJobStatus.Pending;
                     await repository.UpdateAsync(renderJob);
@@ -634,20 +681,32 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
             renderJob.InPoint,
             renderJob.OutPoint,
             renderJob.SelectedVideoTracks,
-            renderJob.SelectedAudioTracks);
+            renderJob.SelectedAudioTracks,
+            jobId,
+            _serviceProvider.GetService<RenderProcessRegistry>());
 
         return success;
     }
 
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern uint SetThreadExecutionState(uint esFlags);
+    private const uint ES_SYSTEM_REQUIRED = 0x00000001;
+
     private IProgress<RenderProgress> CreateRenderProgressReporter(Guid jobId)
     {
-        var startTime = DateTime.UtcNow;
+        // Baseline at the first progress report, not job start - melt/MLT startup cost
+        // otherwise poisons the ETA for the first minutes of every render
+        DateTime? encodeStart = null;
         var lastProgressUpdate = DateTime.UtcNow;
         var lastEventFired = DateTime.UtcNow; // Track UI event throttling
 
         return new Progress<RenderProgress>(renderProgress =>
         {
             var now = DateTime.UtcNow;
+            encodeStart ??= now;
+
+            // Reset the system idle timer so the machine doesn't sleep mid-render
+            SetThreadExecutionState(ES_SYSTEM_REQUIRED);
 
             // Throttle database updates to every 1 second
             if ((now - lastProgressUpdate).TotalSeconds >= 1)
@@ -676,9 +735,10 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
 
             lastEventFired = now;
 
-            var elapsed = now - startTime;
+            var elapsed = now - encodeStart.Value;
             TimeSpan? remaining = null;
-            if (renderProgress.Percentage > 0)
+            // Below 2% the rate estimate is noise - suppress like Shotcut does
+            if (renderProgress.Percentage > 2)
             {
                 var totalEstimated = elapsed.TotalSeconds / (renderProgress.Percentage / 100.0);
                 remaining = TimeSpan.FromSeconds(totalEstimated - elapsed.TotalSeconds);
