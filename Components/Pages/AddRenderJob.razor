@@ -448,6 +448,10 @@
     private List<string> _preflightErrors = [];
     private List<string> _preflightWarnings = [];
 
+    // Keep in sync with the MudStep order above - the stepper API is index-based
+    private const int SourceStepIndex = 0;
+    private const int ReviewStepIndex = 4;
+
     // Track selection
     private List<SelectableTrack> _tracks = [];
     private List<SelectableTrack> _videoTracks = [];
@@ -565,7 +569,7 @@
     private async Task OnStepPreview(StepperInteractionEventArgs args)
     {
         // Leaving the Source step forward requires a source
-        if (args.StepIndex == 0 && args.Action == StepAction.Complete && !IsValid())
+        if (args.StepIndex == SourceStepIndex && args.Action == StepAction.Complete && !IsValid())
         {
             Snackbar.Add(_validationError, Severity.Warning);
             args.Cancel = true;
@@ -573,13 +577,13 @@
         }
 
         // Entering the Review step runs the pre-flight checks
-        if (args.StepIndex == 4 && args.Action == StepAction.Activate)
+        if (args.StepIndex == ReviewStepIndex && args.Action == StepAction.Activate)
         {
             await RunPreflightChecksAsync();
         }
 
         // Completing the final (Review) step adds the job
-        if (args.StepIndex == 4 && args.Action == StepAction.Complete)
+        if (args.StepIndex == ReviewStepIndex && args.Action == StepAction.Complete)
         {
             args.Cancel = true; // we navigate away ourselves on success
             if (_preflightErrors.Count > 0)

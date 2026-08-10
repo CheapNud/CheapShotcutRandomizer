@@ -88,6 +88,11 @@ public class ExportPresetService
             if (properties.Count == 0 || properties.ContainsKey("meta.preset.hidden"))
                 return;
 
+            // A real consumer preset always names a format or codec - filters out
+            // stray non-preset files (READMEs etc.) living in the directory
+            if (!properties.ContainsKey("f") && !properties.ContainsKey("vcodec") && !properties.ContainsKey("acodec"))
+                return;
+
             presets.Add(new ExportPreset
             {
                 Name = Path.GetFileName(filePath),
