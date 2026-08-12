@@ -676,11 +676,11 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
                     break;
 
                 case "open-folder":
-                    Process.Start(new ProcessStartInfo
+                    using (Process.Start(new ProcessStartInfo
                     {
                         FileName = "explorer.exe",
                         Arguments = $"/select,\"{renderJob.OutputPath}\""
-                    });
+                    })) { }
                     break;
             }
         }
