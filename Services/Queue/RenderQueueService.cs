@@ -610,8 +610,9 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
                     renderJob.CompletedAt = DateTime.UtcNow;
                     await repository.UpdateAsync(renderJob);
 
-                    CleanupGeneratedSource(renderJob);
-
+                    // No source cleanup here: dead-lettered jobs can be manually retried,
+                    // which still needs the generated file. Clear All or the startup
+                    // sweep reclaims it eventually.
                     FireStatusChanged(jobId, RenderJobStatus.DeadLetter, renderJob.ProgressPercentage,
                         renderJob.CurrentFrame, ex.Message);
 
