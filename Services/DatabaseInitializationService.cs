@@ -35,7 +35,7 @@ public class DatabaseInitializationService : IHostedService
                 // Try to query with current model columns - will fail if schema is outdated
                 // Note: AI upscaling columns were moved to CheapUpscaler project
                 await db.Database.ExecuteSqlRawAsync(
-                    "SELECT InPoint, OutPoint, SelectedVideoTracks, SelectedAudioTracks, FrameRate, OutputFileSizeBytes FROM RenderJobs LIMIT 1",
+                    "SELECT InPoint, OutPoint, SelectedVideoTracks, SelectedAudioTracks, FrameRate, OutputFileSizeBytes, PostAction, PostActionTarget FROM RenderJobs LIMIT 1",
                     cancellationToken);
 
                 Debug.WriteLine("Database schema is up to date");

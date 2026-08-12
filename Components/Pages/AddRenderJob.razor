@@ -42,6 +42,33 @@
                               AdornmentIcon="@Icons.Material.Filled.FolderOpen"
                               OnAdornmentClick="@BrowseOutput" />
 
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="@(_postAction == "move" ? 5 : 12)">
+                        <MudSelect @bind-Value="_postAction"
+                                   Label="After Completion"
+                                   Variant="Variant.Outlined"
+                                   T="string"
+                                   Margin="Margin.Dense">
+                            <MudSelectItem Value="@("none")" T="string">Do nothing</MudSelectItem>
+                            <MudSelectItem Value="@("move")" T="string">Move output to folder…</MudSelectItem>
+                            <MudSelectItem Value="@("open-folder")" T="string">Show output in Explorer</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    @if (_postAction == "move")
+                    {
+                        <MudItem xs="12" md="7">
+                            <MudTextField @bind-Value="_postActionTarget"
+                                          Label="Destination Folder"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          ReadOnly="true"
+                                          Adornment="Adornment.End"
+                                          AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                                          OnAdornmentClick="@BrowsePostActionFolder" />
+                        </MudItem>
+                    }
+                </MudGrid>
+
                 @if (_isMltSource && _loadedMltProject != null)
                 {
                     <MudAlert Severity="Severity.Success" Dense="true">
@@ -379,6 +406,10 @@
                     <tbody>
                         <tr><td><strong>Source</strong></td><td>@Path.GetFileName(_sourcePath)</td></tr>
                         <tr><td><strong>Output</strong></td><td>@_outputPath</td></tr>
+                        @if (_postAction != "none")
+                        {
+                            <tr><td><strong>After</strong></td><td>@(_postAction == "move" ? $"Move to {_postActionTarget}" : "Show in Explorer")</td></tr>
+                        }
                         @if (SelectedPreset != null)
                         {
                             <tr><td><strong>Preset</strong></td><td>@SelectedPreset.DisplayName</td></tr>
@@ -419,6 +450,8 @@
     private string _sourcePath = string.Empty;
     private string _outputPath = string.Empty;
     private bool _isMltSource = false;
+    private string _postAction = "none";
+    private string _postActionTarget = string.Empty;
 
     private int _mltThreads = Environment.ProcessorCount;
     private int _maxThreads = Environment.ProcessorCount;
@@ -632,6 +665,12 @@
             }
         }
 
+        // The move post-action needs somewhere to move to
+        if (_postAction == "move" && string.IsNullOrWhiteSpace(_postActionTarget))
+        {
+            _preflightErrors.Add("Pick a destination folder for the move-after-completion action");
+        }
+
         // Duplicate output target among unfinished jobs corrupts the output
         try
         {
@@ -696,6 +735,15 @@
             }
 
             UpdateEstimatedTime();
+        }
+    }
+
+    private async Task BrowsePostActionFolder()
+    {
+        var selectedFolder = await DesktopInterop.OpenFolderDialogAsync();
+        if (!string.IsNullOrEmpty(selectedFolder))
+        {
+            _postActionTarget = selectedFolder;
         }
     }
 
@@ -948,7 +996,9 @@
             SourceVideoPath = _sourcePath,
             OutputPath = _outputPath,
             RenderType = RenderType.MltSource,
-            Status = RenderJobStatus.Pending
+            Status = RenderJobStatus.Pending,
+            PostAction = _postAction,
+            PostActionTarget = _postAction == "move" ? _postActionTarget : null
         };
 
         // Set up MLT render settings

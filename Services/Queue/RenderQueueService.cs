@@ -555,6 +555,8 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
 
                 await repository.UpdateAsync(renderJob);
 
+                await RunPostActionAsync(renderJob, repository);
+
                 FireStatusChanged(jobId, RenderJobStatus.Completed, 100, renderJob.CurrentFrame);
                 Debug.WriteLine($"Job {jobId} completed successfully");
             }
@@ -638,6 +640,53 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
                 _runningJobs.Remove(jobId);
             }
             jobCts?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Post-completion action (move output / show in Explorer). Best-effort:
+    /// a failed action logs but never fails the completed job.
+    /// </summary>
+    private static async Task RunPostActionAsync(RenderJob renderJob, IRenderJobRepository repository)
+    {
+        try
+        {
+            switch (renderJob.PostAction)
+            {
+                case "move" when !string.IsNullOrEmpty(renderJob.PostActionTarget):
+                    Directory.CreateDirectory(renderJob.PostActionTarget);
+
+                    var fileName = Path.GetFileName(renderJob.OutputPath);
+                    var destination = Path.Combine(renderJob.PostActionTarget, fileName);
+
+                    // Never overwrite an existing file - suffix instead
+                    var suffix = 1;
+                    while (File.Exists(destination))
+                    {
+                        destination = Path.Combine(renderJob.PostActionTarget,
+                            $"{Path.GetFileNameWithoutExtension(fileName)}_{suffix++}{Path.GetExtension(fileName)}");
+                    }
+
+                    File.Move(renderJob.OutputPath, destination);
+                    Debug.WriteLine($"Moved output to {destination}");
+
+                    // Keep the job record pointing at the real file location
+                    renderJob.OutputPath = destination;
+                    await repository.UpdateAsync(renderJob);
+                    break;
+
+                case "open-folder":
+                    using (Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        Arguments = $"/select,\"{renderJob.OutputPath}\""
+                    })) { }
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Post-completion action '{renderJob.PostAction}' failed: {ex.Message}");
         }
     }
 
