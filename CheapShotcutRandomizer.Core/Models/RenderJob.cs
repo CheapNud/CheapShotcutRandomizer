@@ -138,6 +138,17 @@ public class RenderJob
     public string? SelectedAudioTracks { get; set; }
 
     /// <summary>
+    /// Action to run after the job completes successfully:
+    /// "none", "move" (to PostActionTarget), "open-folder" (show output in Explorer)
+    /// </summary>
+    public string PostAction { get; set; } = "none";
+
+    /// <summary>
+    /// Destination folder for the "move" post action
+    /// </summary>
+    public string? PostActionTarget { get; set; }
+
+    /// <summary>
     /// In point marker (frame number). If null, render from start.
     /// Used for MLT projects to render only a specific range.
     /// </summary>

@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapShotcutRandomizer project work tracker
-  Last updated: 2026-08-10
+  Last updated: 2026-08-12
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -48,6 +48,8 @@ _Nothing planned._
 - [ ] (2026-08-09) Prune CI docs bloat (.github/WORKFLOWS*.md + archive, ~2,100 lines about CI) [audit]
 
 ## Done
+
+- [x] (2026-08-12 → 2026-08-12) Post-completion job actions: dropdown in the add-job stepper (do nothing / move output to folder / show in Explorer), move never overwrites, job record follows the file [user]
 
 - [x] (2026-08-10 → 2026-08-10) Show app version at the bottom of the nav drawer (CheapClerk pattern) [user]
 - [x] (2026-08-10 → 2026-08-10) Adopt Shotcut's melt invocation shape: consumer as XML element, percent-encoded xml: URL, ?multi:1 when overriding resolution/fps, absolute-path render XML in system temp [audit]
