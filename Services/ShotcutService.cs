@@ -57,6 +57,43 @@ public class ShotcutService(IXmlService xmlService)
         }
     }
 
+    /// <summary>
+    /// Where generated shuffle/random projects live before rendering - our own temp
+    /// subfolder, so they can be deleted safely once their job reaches a terminal state.
+    /// </summary>
+    public static string GeneratedProjectsTempDir =>
+        Path.Combine(Path.GetTempPath(), "CheapShotcutRandomizer", "generated");
+
+    public static bool IsGeneratedTempProject(string? path) =>
+        !string.IsNullOrEmpty(path) &&
+        Path.GetFullPath(path).StartsWith(Path.GetFullPath(GeneratedProjectsTempDir), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Rewrite relative media resources to absolute paths. Only paths that actually
+    /// resolve to an existing file are touched - pseudo-resources ("black", "color",
+    /// "%luma" names) stay as-is.
+    /// </summary>
+    public static void MakeResourcePathsAbsolute(Mlt project, string sourceDir)
+    {
+        foreach (var propertyList in project.Chain.Select(c => c.Property)
+                     .Append(project.Producer?.Property ?? []))
+        {
+            var resource = propertyList.FirstOrDefault(p => p.Name == "resource");
+            if (resource == null || string.IsNullOrEmpty(resource.Text)
+                || Path.IsPathRooted(resource.Text)
+                || resource.Text.Contains("://"))
+            {
+                continue;
+            }
+
+            var absolutePath = Path.GetFullPath(Path.Combine(sourceDir, resource.Text));
+            if (File.Exists(absolutePath))
+            {
+                resource.Text = absolutePath;
+            }
+        }
+    }
+
     public async Task<string> SaveProjectAsync(Mlt project, string originalPath)
     {
         try

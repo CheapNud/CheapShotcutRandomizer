@@ -77,7 +77,23 @@ public class Entry : IPlaylistItem
     [XmlAttribute(AttributeName = "out")]
     public string Out { get; set; } = string.Empty;
 
-    public int Duration => Convert.ToInt32(Math.Floor((TimeSpan.Parse(Out) - TimeSpan.Parse(In)).TotalSeconds)); // Duration in seconds
+    /// <summary>
+    /// Duration in seconds. Entries written without in/out attributes yield 0
+    /// instead of throwing FormatException out of every duration sum.
+    /// </summary>
+    public int Duration
+    {
+        get
+        {
+            if (!TimeSpan.TryParse(In, System.Globalization.CultureInfo.InvariantCulture, out var inTime) ||
+                !TimeSpan.TryParse(Out, System.Globalization.CultureInfo.InvariantCulture, out var outTime))
+            {
+                return 0;
+            }
+
+            return Convert.ToInt32(Math.Floor((outTime - inTime).TotalSeconds));
+        }
+    }
 
     public double GetDurationSeconds(double frameRate) => Duration;
 

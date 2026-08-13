@@ -381,27 +381,33 @@
     }
 
     /// <summary>
-    /// Save project to a generated file in the same directory as source (to preserve relative paths)
+    /// Save a generated project to the app's temp folder. Media paths are made
+    /// absolute first (they were relative to the source project's directory), so the
+    /// file no longer needs to live beside the source - and the queue deletes it
+    /// once its render job finishes.
     /// </summary>
-    private async Task<string> SaveToSourceDirectoryAsync(Mlt project, string baseName)
+    private async Task<string> SaveGeneratedProjectAsync(Mlt project, string baseName)
     {
         // Validate CurrentProjectPath is set
         if (string.IsNullOrWhiteSpace(ProjectState.CurrentProjectPath))
             throw new InvalidOperationException("Project path not set - cannot save generated MLT");
 
-        // IMPORTANT: Save in same directory as source project to preserve relative paths
-        // MLT files often reference media with relative paths - moving the MLT breaks these
         var sourceDir = Path.GetDirectoryName(ProjectState.CurrentProjectPath)
             ?? throw new InvalidOperationException("Could not determine source directory");
+
+        ShotcutService.MakeResourcePathsAbsolute(project, sourceDir);
 
         // Sanitize baseName - strip path components and remove invalid characters
         var sanitizedBaseName = Path.GetFileName(baseName); // Prevents path traversal
         var invalidChars = Path.GetInvalidFileNameChars();
         sanitizedBaseName = string.Concat(sanitizedBaseName.Select(c => invalidChars.Contains(c) ? '_' : c));
 
+        var tempDir = ShotcutService.GeneratedProjectsTempDir;
+        Directory.CreateDirectory(tempDir);
+
         // Generate unique filename
         var fileName = $"{sanitizedBaseName}_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}.mlt";
-        var outputPath = Path.Combine(sourceDir, fileName);
+        var outputPath = Path.Combine(tempDir, fileName);
 
         // Save project - SaveProjectAsync returns the actual saved path
         var actualPath = await ShotcutSvc.SaveProjectAsync(project, outputPath);
@@ -438,7 +444,7 @@
             var baseName = $"shuffled_{playlist.Name}".Replace(" ", "_");
 
             // Save to temp file
-            var tempPath = await SaveToSourceDirectoryAsync(projectCopy, baseName);
+            var tempPath = await SaveGeneratedProjectAsync(projectCopy, baseName);
 
             // Debug: Verify file was created
             if (!File.Exists(tempPath))
@@ -502,7 +508,7 @@
 
             // Save to temp file
             var baseName = $"random_{newPlaylist.Name}".Replace(" ", "_");
-            var tempPath = await SaveToSourceDirectoryAsync(projectCopy, baseName);
+            var tempPath = await SaveGeneratedProjectAsync(projectCopy, baseName);
 
             // Hand off to the Add Render Job stepper with the generated track pre-selected
             // Generated playlists are always video tracks (with audio)

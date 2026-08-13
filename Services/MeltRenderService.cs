@@ -215,7 +215,7 @@ public class MeltRenderService
         // The render copy lives in system temp, so relative media paths must become
         // absolute against the source project's directory (Shotcut exports absolute too)
         var sourceDir = Path.GetDirectoryName(Path.GetFullPath(mltFilePath)) ?? "";
-        MakeResourcePathsAbsolute(project, sourceDir);
+        ShotcutService.MakeResourcePathsAbsolute(project, sourceDir);
 
         var tempPath = tempManager.GetTempFilePath("melt_render", ".mlt");
         await _xmlService.SerializeAsync(tempPath, project);
@@ -302,30 +302,6 @@ public class MeltRenderService
 
     /// <summary>
     /// Rewrite relative media resources to absolute paths. Only paths that actually
-    /// resolve to an existing file are touched - pseudo-resources ("black", "color",
-    /// "%luma" names) stay as-is.
-    /// </summary>
-    private static void MakeResourcePathsAbsolute(Mlt project, string sourceDir)
-    {
-        foreach (var propertyList in project.Chain.Select(c => c.Property)
-                     .Append(project.Producer?.Property ?? []))
-        {
-            var resource = propertyList.FirstOrDefault(p => p.Name == "resource");
-            if (resource == null || string.IsNullOrEmpty(resource.Text)
-                || Path.IsPathRooted(resource.Text)
-                || resource.Text.Contains("://"))
-            {
-                continue;
-            }
-
-            var absolutePath = Path.GetFullPath(Path.Combine(sourceDir, resource.Text));
-            if (File.Exists(absolutePath))
-            {
-                resource.Text = absolutePath;
-            }
-        }
-    }
-
     /// <summary>
     /// Insert the avformat consumer element (with all encoding properties as attributes)
     /// after the profile element - the document shape Shotcut hands to melt.

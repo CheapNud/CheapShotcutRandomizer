@@ -68,6 +68,25 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
             Debug.WriteLine($"Could not read AutoStartQueue setting: {ex.Message}");
         }
 
+        // Sweep generated temp projects left behind by crashes - anything older than
+        // 3 days can't belong to a live queue entry worth keeping
+        try
+        {
+            if (Directory.Exists(ShotcutService.GeneratedProjectsTempDir))
+            {
+                foreach (var staleFile in Directory.GetFiles(ShotcutService.GeneratedProjectsTempDir, "*.mlt")
+                             .Where(f => File.GetLastWriteTimeUtc(f) < DateTime.UtcNow.AddDays(-3)))
+                {
+                    File.Delete(staleFile);
+                    Debug.WriteLine($"Swept stale generated project {staleFile}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Stale temp sweep failed: {ex.Message}");
+        }
+
         // Perform crash recovery on startup
         await RecoverCrashedJobsAsync();
 
@@ -286,6 +305,7 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
 
         foreach (var renderJob in allJobs)
         {
+            CleanupGeneratedSource(renderJob);
             await repository.DeleteAsync(renderJob.JobId);
         }
 
@@ -319,6 +339,8 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
         renderJob.Status = RenderJobStatus.Cancelled;
         renderJob.CompletedAt = DateTime.UtcNow;
         await repository.UpdateAsync(renderJob);
+
+        CleanupGeneratedSource(renderJob);
 
         FireStatusChanged(jobId, RenderJobStatus.Cancelled, renderJob.ProgressPercentage, renderJob.CurrentFrame);
 
@@ -556,6 +578,7 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
                 await repository.UpdateAsync(renderJob);
 
                 await RunPostActionAsync(renderJob, repository);
+                CleanupGeneratedSource(renderJob);
 
                 FireStatusChanged(jobId, RenderJobStatus.Completed, 100, renderJob.CurrentFrame);
                 Debug.WriteLine($"Job {jobId} completed successfully");
@@ -587,6 +610,9 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
                     renderJob.CompletedAt = DateTime.UtcNow;
                     await repository.UpdateAsync(renderJob);
 
+                    // No source cleanup here: dead-lettered jobs can be manually retried,
+                    // which still needs the generated file. Clear All or the startup
+                    // sweep reclaims it eventually.
                     FireStatusChanged(jobId, RenderJobStatus.DeadLetter, renderJob.ProgressPercentage,
                         renderJob.CurrentFrame, ex.Message);
 
@@ -640,6 +666,27 @@ public class RenderQueueService : BackgroundService, IRenderQueueService
                 _runningJobs.Remove(jobId);
             }
             jobCts?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Delete a generated shuffle/random temp project once its job reaches a terminal
+    /// state. Only ever touches files inside our own temp subfolder - never user files.
+    /// </summary>
+    private static void CleanupGeneratedSource(RenderJob renderJob)
+    {
+        try
+        {
+            if (ShotcutService.IsGeneratedTempProject(renderJob.SourceVideoPath)
+                && File.Exists(renderJob.SourceVideoPath))
+            {
+                File.Delete(renderJob.SourceVideoPath);
+                Debug.WriteLine($"Deleted generated temp project {renderJob.SourceVideoPath}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Could not delete generated temp project: {ex.Message}");
         }
     }
 

@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapShotcutRandomizer project work tracker
-  Last updated: 2026-08-12
+  Last updated: 2026-08-13
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -38,10 +38,6 @@ _Nothing planned._
 
 - [ ] (2026-08-09) Fold Core project into main project (or strip to plain Sdk); split not earning its keep [audit]
 - [ ] (2026-08-09) Add @key to RenderQueue job list foreach; skip 5s poll when paused and idle [audit]
-- [ ] (2026-08-09) Temp .mlt files accumulate beside source project on every Add to Queue — add cleanup [audit]
-  - Components/Pages/Home.razor:566, Services/ShotcutService.cs:64
-- [ ] (2026-08-09) Entry.Duration parses In/Out without guard — FormatException on MLT entries missing attributes [audit]
-  - CheapShotcutRandomizer.Core/Models/Mlt.cs:80
 - [ ] (2026-08-09) BackgroundTaskQueue full+paused hangs Add-job UI call — pass cancellation to WriteAsync [audit]
   - Services/Queue/BackgroundTaskQueue.cs:30
 - [ ] (2026-08-09) RenderQueueService minors: progress-throttle races, Task.Run token drops shutdown work, StopAsync delay token, event-subscriber isolation [audit]
@@ -49,6 +45,10 @@ _Nothing planned._
 
 ## Done
 
+- [x] (2026-08-09 → 2026-08-13) Temp .mlt files accumulate beside source project on every Add to Queue — add cleanup [audit]
+  - Components/Pages/Home.razor:566, Services/ShotcutService.cs:64
+- [x] (2026-08-09 → 2026-08-13) Entry.Duration parses In/Out without guard — FormatException on MLT entries missing attributes [audit]
+  - CheapShotcutRandomizer.Core/Models/Mlt.cs:80
 - [x] (2026-08-12 → 2026-08-12) Post-completion job actions: dropdown in the add-job stepper (do nothing / move output to folder / show in Explorer), move never overwrites, job record follows the file [user]
 
 - [x] (2026-08-10 → 2026-08-10) Show app version at the bottom of the nav drawer (CheapClerk pattern) [user]
