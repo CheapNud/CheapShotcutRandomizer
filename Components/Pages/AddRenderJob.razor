@@ -87,19 +87,32 @@
                 @if (_presets.Count > 0)
                 {
                     <MudItem xs="12">
-                        <MudSelect @bind-Value="_selectedPresetKey"
-                                   @bind-Value:after="OnPresetChanged"
-                                   Label="Export Preset"
-                                   Variant="Variant.Outlined"
-                                   T="string"
-                                   Margin="Margin.Dense"
-                                   HelperText="Stock MLT/Shotcut presets — Custom exposes the manual encoder settings">
-                            <MudSelectItem Value="@("")" T="string">Custom (manual settings)</MudSelectItem>
-                            @foreach (var preset in _presets)
-                            {
-                                <MudSelectItem Value="@preset.Key" T="string">@preset.DisplayName</MudSelectItem>
-                            }
-                        </MudSelect>
+                        <MudAutocomplete T="CheapShotcutRandomizer.Services.ExportPreset"
+                                         @bind-Value="SelectedPreset"
+                                         SearchFunc="SearchPresets"
+                                         ToStringFunc="@(preset => preset?.DisplayName)"
+                                         Label="Export Preset"
+                                         Placeholder="Custom (manual settings)"
+                                         Variant="Variant.Outlined"
+                                         Margin="Margin.Dense"
+                                         Clearable="true"
+                                         ResetValueOnEmptyText="true"
+                                         MaxItems="null"
+                                         HelperText="Type to search the stock MLT/Shotcut presets — leave empty for manual encoder settings">
+                            <ItemTemplate Context="preset">
+                                @if (IsRecommended(preset))
+                                {
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudIcon Icon="@Icons.Material.Filled.Star" Size="Size.Small" Color="Color.Warning" />
+                                        <MudText>@preset.DisplayName</MudText>
+                                    </MudStack>
+                                }
+                                else
+                                {
+                                    <MudText>@preset.DisplayName</MudText>
+                                }
+                            </ItemTemplate>
+                        </MudAutocomplete>
                     </MudItem>
                 }
 
@@ -120,14 +133,15 @@
                                Variant="Variant.Outlined"
                                T="string"
                                Margin="Margin.Dense">
-                        <MudSelectItem Value="@("libx264")" T="string">H.264 (libx264) — CPU</MudSelectItem>
-                        <MudSelectItem Value="@("libx265")" T="string">H.265/HEVC (libx265) — CPU</MudSelectItem>
+                        @* Detected hardware encoders first - they're the ones people hunt for *@
                         @foreach (var encoder in HardwareEncoders)
                         {
                             <MudSelectItem Value="@encoder.CodecName" T="string" Disabled="@(!encoder.IsAvailable)">
                                 @encoder.DisplayName — @encoder.VendorType@(encoder.IsAvailable ? $" (~{encoder.EstimatedSpeedupFactor:F1}x faster)" : " (not detected)")
                             </MudSelectItem>
                         }
+                        <MudSelectItem Value="@("libx264")" T="string">H.264 (libx264) — CPU, best compression</MudSelectItem>
+                        <MudSelectItem Value="@("libx265")" T="string">H.265/HEVC (libx265) — CPU, best compression</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="6">
@@ -471,11 +485,37 @@
     private HardwareCapabilities? _hardware;
     private AppSettings? _appSettings;
 
-    // Stock MLT export presets
+    // Stock MLT export presets, recommended ones first
+    private static readonly string[] RecommendedPresetNames = ["YouTube", "x264-medium", "x265-medium", "webm", "GIF"];
     private List<CheapShotcutRandomizer.Services.ExportPreset> _presets = [];
-    private string _selectedPresetKey = "";
-    private CheapShotcutRandomizer.Services.ExportPreset? SelectedPreset =>
-        _presets.FirstOrDefault(p => p.Key == _selectedPresetKey);
+    private CheapShotcutRandomizer.Services.ExportPreset? _selectedPreset;
+
+    private CheapShotcutRandomizer.Services.ExportPreset? SelectedPreset
+    {
+        get => _selectedPreset;
+        set
+        {
+            _selectedPreset = value;
+            OnPresetChanged();
+        }
+    }
+
+    private static bool IsRecommended(CheapShotcutRandomizer.Services.ExportPreset preset) =>
+        Array.IndexOf(RecommendedPresetNames, preset.Key) >= 0;
+
+    private Task<IEnumerable<CheapShotcutRandomizer.Services.ExportPreset>> SearchPresets(
+        string searchText, CancellationToken cancellationToken)
+    {
+        IEnumerable<CheapShotcutRandomizer.Services.ExportPreset> matches = _presets;
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            matches = matches.Where(p => p.DisplayName.Contains(searchText, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Boundary: the SearchFunc delegate demands a Task, but the search is pure in-memory
+        return Task.FromResult(matches);
+    }
 
     // Pre-flight results shown on the Review step
     private List<string> _preflightErrors = [];
@@ -579,9 +619,18 @@
         var videosFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
         _outputPath = Path.Combine(videosFolder, "output.mp4");
 
-        // Discover the stock MLT export presets shipped next to melt
+        // Discover the stock MLT export presets shipped next to melt; recommended
+        // picks float to the top of the autocomplete
         var meltPath = ExecutableDetection.DetectMelt(_appSettings.MeltPath);
-        _presets = PresetService.LoadPresets(meltPath);
+        _presets = PresetService.LoadPresets(meltPath)
+            .OrderBy(p =>
+            {
+                var rank = Array.IndexOf(RecommendedPresetNames, p.Key);
+                return rank < 0 ? int.MaxValue : rank;
+            })
+            .ThenBy(p => p.Category)
+            .ThenBy(p => p.Name)
+            .ToList();
 
         // A draft from the Randomizer flows pre-fills the source
         if (!string.IsNullOrEmpty(Draft.SourcePath))
