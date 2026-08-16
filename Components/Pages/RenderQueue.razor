@@ -4,7 +4,6 @@
 @using CheapHelpers.MediaProcessing.Services
 @inject IRenderQueueService QueueService
 @inject IRenderJobRepository Repository
-@inject HardwareDetectionService HardwareService
 @inject IDialogService DialogService
 @inject CheapShotcutRandomizer.Services.SettingsService SettingsService
 @inject NavigationManager Nav
@@ -17,25 +16,6 @@
     <MudStack Spacing="3">
         <!-- Page Title -->
         <MudText Typo="Typo.h4">Render Queue</MudText>
-
-        <!-- Hardware Capabilities Card (Full Width at Top) -->
-        @if (_isLoadingHardware)
-        {
-            <MudPaper Class="pa-4">
-                <MudStack Spacing="2">
-                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="30%" Height="32px" />
-                    <MudDivider />
-                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="60%" />
-                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="55%" />
-                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="60px" />
-                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="80%" />
-                </MudStack>
-            </MudPaper>
-        }
-        else if (_hardware != null)
-        {
-            <HardwareInfoCard Hardware="_hardware" />
-        }
 
         <!-- Queue Status and Control -->
         <MudPaper Class="pa-4">
@@ -177,17 +157,8 @@
                         <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Size="Size.Large" Color="Color.Default" Style="font-size: 96px; opacity: 0.3;" />
                         <MudText Typo="Typo.h5" Align="Align.Center">Ready to render!</MudText>
                         <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Default">
-                            Click "Add Job" to get started with your first video render.
+                            Click "Add Files" to get started with your first video render.
                         </MudText>
-                        <MudPaper Class="pa-4" Style="background-color: var(--mud-palette-background-grey); max-width: 600px;">
-                            <MudText Typo="Typo.body2" Align="Align.Center">
-                                <strong>Quick Tip:</strong> Make sure your source video is ready and choose your desired output format.
-                                @if (_hardware?.NvencAvailable == true)
-                                {
-                                    <text>Your NVENC hardware acceleration will make rendering fast!</text>
-                                }
-                            </MudText>
-                        </MudPaper>
                     </MudStack>
                 }
                 else
@@ -328,8 +299,6 @@
     private List<RenderJob> _activeJobs = new();
     private List<RenderJob> _completedJobs = new();
     private List<RenderJob> _failedJobs = new();
-    private HardwareCapabilities? _hardware;
-    private bool _isLoadingHardware = true;
 
     // Queue control state
     private bool _isQueuePaused = true;
@@ -356,22 +325,8 @@
         _showCompletionNotifications = appSettings.ShowNotificationsOnComplete;
         _queueStats = await QueueService.GetQueueStatisticsAsync();
 
-        // Run hardware detection and job loading in parallel for better performance
-        var hardwareTask = Task.Run(async () =>
-        {
-            _hardware = await HardwareService.DetectHardwareAsync();
-            _isLoadingHardware = false;
-            await InvokeAsync(StateHasChanged);
-        });
-
-        var jobsTask = Task.Run(async () =>
-        {
-            await LoadJobs();
-            _isLoadingJobs = false;
-            await InvokeAsync(StateHasChanged);
-        });
-
-        await Task.WhenAll(hardwareTask, jobsTask);
+        await LoadJobs();
+        _isLoadingJobs = false;
 
         // Start polling timer as fallback (every 5 seconds - reduced from 2 to avoid UI thrashing)
         _refreshTimer = new System.Threading.Timer(

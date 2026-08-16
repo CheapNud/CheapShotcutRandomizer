@@ -5,6 +5,7 @@
 @using CheapHelpers.MediaProcessing.Services
 @inject CheapShotcutRandomizer.Services.SettingsService SettingsService
 @inject SvpDetectionService SvpDetection
+@inject HardwareDetectionService HardwareService
 @inject IDesktopInteropService DesktopInterop
 @inject ISnackbar Snackbar
 
@@ -306,6 +307,14 @@ else
 
         <!-- Note: AI features (RIFE, Real-ESRGAN, Real-CUGAN) have been moved to CheapUpscaler -->
 
+        <!-- Hardware Capabilities (read-only info) -->
+        @if (_hardware != null)
+        {
+            <MudItem xs="12">
+                <HardwareInfoCard Hardware="_hardware" />
+            </MudItem>
+        }
+
         <!-- Action Buttons -->
         <MudItem xs="12">
             <MudPaper Class="pa-4" Elevation="2">
@@ -346,6 +355,7 @@ else
 @code {
     private AppSettings? _settings;
     private SvpInstallation? _svpInstallation;
+    private HardwareCapabilities? _hardware;
     private List<DependencyStatusItem>? _dependencyStatus = null;
 
     private enum FileType
@@ -451,6 +461,8 @@ else
         await LoadSettingsAsync();
         DetectSvpInstallation();
         PopulateDependencyStatus();
+
+        _hardware = await HardwareService.DetectHardwareAsync();
     }
 
     private void DetectSvpInstallation()
