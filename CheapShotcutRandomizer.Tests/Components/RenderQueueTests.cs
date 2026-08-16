@@ -84,26 +84,14 @@ public class RenderQueueTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
-    public void RenderQueue_Shows_HardwareInfo_When_Loaded()
+    public void RenderQueue_Renders_Queue_Controls()
     {
-        // Arrange
-        var hardware = new HardwareCapabilities
-        {
-            CpuCoreCount = 16,
-            CpuName = "AMD Ryzen 9 5950X",
-            NvencAvailable = true,
-            GpuName = "NVIDIA RTX 3090"
-        };
-        _mockHardwareService.Setup(x => x.DetectHardwareAsync()).ReturnsAsync(hardware);
-
-        // Act
+        // Act - hardware info now lives on the Settings page; the queue stays queue-only
         var component = Render<RenderQueue>();
-        component.WaitForState(() => !component.Instance.GetType()
-            .GetField("_isLoadingHardware", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .GetValue(component.Instance)!.Equals(true), TimeSpan.FromSeconds(2));
 
         // Assert
-        component.Markup.Should().Contain("AMD Ryzen 9 5950X");
+        component.Markup.Should().Contain("Render Queue");
+        component.Markup.Should().Contain("Add Files");
     }
 
     [Fact]
@@ -166,7 +154,7 @@ public class RenderQueueTests : BunitContext, IAsyncLifetime
 
         // Assert
         component.Markup.Should().Contain("Ready to render!");
-        component.Markup.Should().Contain("Click \"Add Job\" to get started");
+        component.Markup.Should().Contain("Click \"Add Files\" to get started");
     }
 
     [Fact]
