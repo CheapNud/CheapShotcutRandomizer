@@ -100,11 +100,26 @@ public class Entry : IPlaylistItem
     public string GetDisplayName() => $"Entry [{Producer}]";
 }
 
+[XmlRoot(ElementName = "filter")]
+public class Filter
+{
+    [XmlElement(ElementName = "property")]
+    public List<Property> Property { get; set; } = [];
+    [XmlAttribute(AttributeName = "id")]
+    public string Id { get; set; } = string.Empty;
+}
+
 [XmlRoot(ElementName = "playlist")]
 public class Playlist
 {
     [XmlElement(ElementName = "property")]
     public List<Property> Property { get; set; } = [];
+
+    /// <summary>
+    /// Filters attached to this playlist/track (e.g. Size Position Rotate for grid cells)
+    /// </summary>
+    [XmlElement(ElementName = "filter")]
+    public List<Filter> Filter { get; set; } = [];
 
     // Document-order backing store; entries and blanks interleave on a real timeline,
     // so losing this order shifts clips and moves the gaps to the end on re-serialization

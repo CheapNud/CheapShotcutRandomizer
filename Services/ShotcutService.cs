@@ -264,6 +264,146 @@ public class ShotcutService(IXmlService xmlService)
     }
 
     /// <summary>
+    /// Generate a split-screen compilation: N independent random playlists, each shown
+    /// in its own cell of a side-by-side (2) or 2x2 (4) grid. Uses the same mechanics
+    /// Shotcut's UI produces: a Size Position Rotate filter (MLT affine) per track and
+    /// the mix + qtblend transitions Shotcut plants for every video track.
+    /// Returns the tractor track indices of the generated cells.
+    /// </summary>
+    public List<int> GenerateGridCompilation(
+        Mlt project,
+        List<(int PlaylistIndex, int TargetDurationSeconds)> sourcePlaylists,
+        double durationWeight,
+        double numberOfVideosWeight,
+        int cells)
+    {
+        if (cells is not (2 or 4))
+            throw new ArgumentException("Grid layout supports 2 or 4 cells", nameof(cells));
+
+        var profileWidth = int.TryParse(project.Profile?.Width, out var parsedWidth) ? parsedWidth : 1920;
+        var profileHeight = int.TryParse(project.Profile?.Height, out var parsedHeight) ? parsedHeight : 1080;
+        var cellRects = BuildCellRects(profileWidth, profileHeight, cells);
+
+        var trackIndices = new List<int>();
+        Playlist? longestPlaylist = null;
+        var longestDuration = -1;
+
+        for (int cell = 0; cell < cells; cell++)
+        {
+            var (playlist, trackIndex) = GenerateRandomPlaylist(project, sourcePlaylists, durationWeight, numberOfVideosWeight);
+
+            var nameProperty = playlist.Property.FirstOrDefault(p => p.Name == "shotcut:name");
+            if (nameProperty != null)
+            {
+                nameProperty.Text = $"grid {cell + 1}";
+            }
+
+            // Size Position Rotate filter placing this track in its grid cell.
+            // shotcut:filter marks it so Shotcut's UI shows it as an editable SPR filter.
+            playlist.Filter.Add(new Filter
+            {
+                Id = $"gridCell{trackIndex}",
+                Property =
+                [
+                    new() { Name = "mlt_service", Text = "affine" },
+                    new() { Name = "shotcut:filter", Text = "affineSizePosition" },
+                    new() { Name = "transition.rect", Text = cellRects[cell] },
+                    new() { Name = "transition.valign", Text = "middle" },
+                    new() { Name = "transition.halign", Text = "center" },
+                    new() { Name = "transition.fill", Text = "1" },
+                    new() { Name = "transition.distort", Text = "0" },
+                    new() { Name = "background", Text = "color:#00000000" }
+                ]
+            });
+
+            EnsureTrackTransitions(project, trackIndex);
+            trackIndices.Add(trackIndex);
+
+            var duration = playlist.Entry.Sum(e => e.Duration);
+            if (duration > longestDuration)
+            {
+                longestDuration = duration;
+                longestPlaylist = playlist;
+            }
+        }
+
+        // Render range spans the longest cell; shorter cells hold black once exhausted
+        if (longestPlaylist != null)
+        {
+            SetRenderRangeToPlaylistDuration(project, longestPlaylist);
+        }
+
+        return trackIndices;
+    }
+
+    private static List<string> BuildCellRects(int width, int height, int cells)
+    {
+        var halfWidth = width / 2;
+        var halfHeight = height / 2;
+
+        // rect format: "x y w h opacity"
+        return cells == 2
+            ? [
+                // Side by side, vertically centered
+                $"0 {height / 4} {halfWidth} {halfHeight} 1",
+                $"{halfWidth} {height / 4} {halfWidth} {halfHeight} 1"
+              ]
+            : [
+                $"0 0 {halfWidth} {halfHeight} 1",
+                $"{halfWidth} 0 {halfWidth} {halfHeight} 1",
+                $"0 {halfHeight} {halfWidth} {halfHeight} 1",
+                $"{halfWidth} {halfHeight} {halfWidth} {halfHeight} 1"
+              ];
+    }
+
+    /// <summary>
+    /// Plant the two per-track transitions Shotcut creates for every video track
+    /// (audio mix against track 0, qtblend video compositing against the track below)
+    /// so added tracks actually blend instead of replacing the output.
+    /// </summary>
+    public void EnsureTrackTransitions(Mlt project, int trackIndex)
+    {
+        var mainTractor = project.Tractor.First(x => x.Property.Any(y => y.Name == "shotcut"));
+
+        bool HasTransition(string mltService) => mainTractor.Transition.Any(t =>
+            t.Property.Any(p => p.Name == "mlt_service" && p.Text == mltService) &&
+            t.Property.Any(p => p.Name == "b_track" && p.Text == trackIndex.ToString()));
+
+        if (!HasTransition("mix"))
+        {
+            mainTractor.Transition.Add(new Transition
+            {
+                Id = $"transition_mix_{trackIndex}",
+                Property =
+                [
+                    new() { Name = "a_track", Text = "0" },
+                    new() { Name = "b_track", Text = trackIndex.ToString() },
+                    new() { Name = "mlt_service", Text = "mix" },
+                    new() { Name = "always_active", Text = "1" },
+                    new() { Name = "sum", Text = "1" }
+                ]
+            });
+        }
+
+        if (!HasTransition("qtblend"))
+        {
+            mainTractor.Transition.Add(new Transition
+            {
+                Id = $"transition_blend_{trackIndex}",
+                Property =
+                [
+                    // a_track=0 (composite onto the base) for every blend: verified with
+                    // melt that chaining a_track to the previous track loses lower cells
+                    new() { Name = "a_track", Text = "0" },
+                    new() { Name = "b_track", Text = trackIndex.ToString() },
+                    new() { Name = "mlt_service", Text = "qtblend" },
+                    new() { Name = "threads", Text = "0" }
+                ]
+            });
+        }
+    }
+
+    /// <summary>
     /// Sets the main tractor's in/out points to match the duration of the specified playlist.
     /// This limits the render output to only the playlist's content.
     /// </summary>
