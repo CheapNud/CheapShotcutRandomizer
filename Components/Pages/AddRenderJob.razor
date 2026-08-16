@@ -16,12 +16,17 @@
 
 <PageTitle>Add Render Job - Cheap Shotcut Randomizer</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
-    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/"))" />
-    <MudText Typo="Typo.h4">Add Render Job</MudText>
-</MudStack>
+<PageHeader Kicker="QUEUE" Title="Add a render job" Subtitle="Source, encoding, tracks and range — review before it queues">
+    <Actions>
+        <MudButton Variant="Variant.Text"
+                   StartIcon="@Icons.Material.Filled.ArrowBack"
+                   OnClick="@(() => Nav.NavigateTo("/"))">
+            Back to Queue
+        </MudButton>
+    </Actions>
+</PageHeader>
 
-<MudPaper Class="pa-4">
+<MudPaper Class="pa-6" Elevation="0">
     <MudStepper OnPreviewInteraction="OnStepPreview" CompleteButtonIcon="@Icons.Material.Filled.AddToQueue">
         <MudStep Title="Source" SecondaryText="Project & output">
             <MudStack Spacing="3" Class="pa-2">

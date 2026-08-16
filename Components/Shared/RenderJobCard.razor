@@ -1,14 +1,14 @@
 @using CheapShotcutRandomizer.Models
 
-<MudPaper Class="pa-4 mb-2">
+<MudPaper Class="pa-6 mb-4" Elevation="0">
     <MudGrid>
         <MudItem xs="12">
             <MudStack Row="true" AlignItems="AlignItems.Center">
                 <MudIcon Icon="@GetStatusIcon()" Color="@GetStatusColor()" />
                 <MudText Typo="Typo.h6">@Path.GetFileName(Job.SourceVideoPath)</MudText>
                 <MudSpacer />
-                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor()">
-                    @Job.Status.ToString()
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@GetStatusColor()">
+                    @GetStatusLabel()
                 </MudChip>
             </MudStack>
         </MudItem>
@@ -81,37 +81,37 @@
             <MudStack Row="true" Spacing="2">
                 @if (Job.Status == RenderJobStatus.Running)
                 {
-                    <MudButton Size="Size.Small" Variant="Variant.Filled"
+                    <MudButton Size="Size.Small" Variant="Variant.Text"
                                Color="Color.Warning" OnClick="@(() => OnPause.InvokeAsync(Job.JobId))">
                         Pause
                     </MudButton>
-                    <MudButton Size="Size.Small" Variant="Variant.Filled"
+                    <MudButton Size="Size.Small" Variant="Variant.Text"
                                Color="Color.Error" OnClick="@(() => OnCancel.InvokeAsync(Job.JobId))">
                         Cancel
                     </MudButton>
                 }
                 else if (Job.Status == RenderJobStatus.Paused)
                 {
-                    <MudButton Size="Size.Small" Variant="Variant.Filled"
+                    <MudButton Size="Size.Small" Variant="Variant.Text"
                                Color="Color.Success" OnClick="@(() => OnResume.InvokeAsync(Job.JobId))">
                         Resume
                     </MudButton>
-                    <MudButton Size="Size.Small" Variant="Variant.Filled"
+                    <MudButton Size="Size.Small" Variant="Variant.Text"
                                Color="Color.Error" OnClick="@(() => OnCancel.InvokeAsync(Job.JobId))">
                         Cancel
                     </MudButton>
                 }
                 else if (Job.Status == RenderJobStatus.Failed || Job.Status == RenderJobStatus.DeadLetter)
                 {
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                    <MudButton Size="Size.Small" Variant="Variant.Text"
                                Color="Color.Primary" OnClick="@(() => OnRetry.InvokeAsync(Job.JobId))">
                         Retry
                     </MudButton>
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                    <MudButton Size="Size.Small" Variant="Variant.Text"
                                Color="Color.Error" OnClick="@ShowErrorDetails">
                         View Error
                     </MudButton>
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                    <MudButton Size="Size.Small" Variant="Variant.Text"
                                Color="Color.Error" OnClick="@(() => OnDelete.InvokeAsync(Job.JobId))"
                                StartIcon="@Icons.Material.Filled.Delete">
                         Delete
@@ -119,11 +119,11 @@
                 }
                 else if (Job.Status == RenderJobStatus.Completed)
                 {
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                    <MudButton Size="Size.Small" Variant="Variant.Text"
                                Color="Color.Success" OnClick="@OpenOutputFolder">
                         Open Folder
                     </MudButton>
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                    <MudButton Size="Size.Small" Variant="Variant.Text"
                                Color="Color.Error" OnClick="@(() => OnDelete.InvokeAsync(Job.JobId))"
                                StartIcon="@Icons.Material.Filled.Delete">
                         Delete
@@ -131,7 +131,7 @@
                 }
                 else if (Job.Status == RenderJobStatus.Pending)
                 {
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                    <MudButton Size="Size.Small" Variant="Variant.Text"
                                Color="Color.Error" OnClick="@(() => OnDelete.InvokeAsync(Job.JobId))"
                                StartIcon="@Icons.Material.Filled.Delete">
                         Delete
@@ -139,7 +139,7 @@
                 }
                 else if (Job.Status == RenderJobStatus.Cancelled)
                 {
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                    <MudButton Size="Size.Small" Variant="Variant.Text"
                                Color="Color.Error" OnClick="@(() => OnDelete.InvokeAsync(Job.JobId))"
                                StartIcon="@Icons.Material.Filled.Delete">
                         Delete
@@ -295,14 +295,24 @@
         _ => Icons.Material.Filled.Help
     };
 
+    // Semantic status colours: Error = terminal failure, Warning = in remediation,
+    // Success = completed, Secondary = at-rest, Primary = actively in progress
     private Color GetStatusColor() => Job.Status switch
     {
+        RenderJobStatus.Pending => Color.Secondary,
         RenderJobStatus.Running => Color.Primary,
+        RenderJobStatus.Paused => Color.Warning,
         RenderJobStatus.Completed => Color.Success,
         RenderJobStatus.Failed => Color.Error,
-        RenderJobStatus.Cancelled => Color.Warning,
         RenderJobStatus.DeadLetter => Color.Error,
+        RenderJobStatus.Cancelled => Color.Default,
         _ => Color.Default
+    };
+
+    private string GetStatusLabel() => Job.Status switch
+    {
+        RenderJobStatus.DeadLetter => "Dead Letter",
+        _ => Job.Status.ToString()
     };
 
     private void ShowErrorDetails()

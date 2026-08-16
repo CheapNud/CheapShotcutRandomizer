@@ -6,7 +6,7 @@
 
 <PageTitle>Find Files - Cheap Shotcut Randomizer</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Find Files</MudText>
+<PageHeader Kicker="PROJECT" Title="Find Files" Subtitle="Locate clips across playlists and spot duplicates" />
 
 @if (!ProjectState.IsProjectLoaded)
 {
@@ -16,17 +16,19 @@
 }
 else
 {
-    <MudPaper Class="pa-4">
+    <MudPaper Class="pa-6" Elevation="0">
         <MudStack Spacing="2">
             <MudTextField @bind-Value="_searchQuery"
                          Label="Search by filename (partial match)"
                          Placeholder="Enter part of filename..."
                          Immediate="true"
+                         Clearable="true"
                          DebounceInterval="500"
                          OnDebounceIntervalElapsed="@SearchFiles"
-                         Adornment="Adornment.End"
-                         AdornmentIcon="@Icons.Material.Filled.Clear"
-                         OnAdornmentClick="@ClearSearch"
+                         OnClearButtonClick="@ClearSearch"
+                         Adornment="Adornment.Start"
+                         AdornmentIcon="@Icons.Material.Filled.Search"
+                         Class="mb-4"
                          @onkeydown="@OnSearchKeyDown" />
 
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">

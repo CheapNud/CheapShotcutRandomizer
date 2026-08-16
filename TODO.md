@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapShotcutRandomizer project work tracker
-  Last updated: 2026-08-13
+  Last updated: 2026-08-16
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -44,6 +44,8 @@ _Nothing planned._
 - [ ] (2026-08-09) Prune CI docs bloat (.github/WORKFLOWS*.md + archive, ~2,100 lines about CI) [audit]
 
 ## Done
+
+- [x] (2026-08-16 → 2026-08-16) Apply global MudBlazor house style: flat theme with hairline borders, two-font typography, PageHeader/ProgressButton components, one-CTA rule, semantic status chips [user]
 
 - [x] (2026-08-09 → 2026-08-13) Temp .mlt files accumulate beside source project on every Add to Queue — add cleanup [audit]
   - Components/Pages/Home.razor:566, Services/ShotcutService.cs:64

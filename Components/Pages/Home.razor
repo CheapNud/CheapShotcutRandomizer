@@ -12,32 +12,33 @@
 
 <PageTitle>Randomizer - Cheap Shotcut Randomizer</PageTitle>
 
-<MudPaper Class="pa-4 mb-4">
-    <MudStack Spacing="3">
-        <MudText Typo="Typo.h4">Shotcut Project Randomizer</MudText>
-
+<PageHeader Kicker="RANDOMIZER" Title="Shuffle & generate playlists" Subtitle="Load a Shotcut project, then shuffle or build random compilations">
+    <Actions>
         @if (ProjectState.CurrentProject == null)
         {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@LoadProjectAsync" StartIcon="@Icons.Material.Filled.FolderOpen">
+            <ProgressButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@LoadProjectAsync" StartIcon="@Icons.Material.Filled.FolderOpen">
                 Load Shotcut Project
-            </MudButton>
+            </ProgressButton>
         }
         else
         {
-            <MudAlert Severity="Severity.Success">
-                Project loaded: <strong>@ProjectState.CurrentProjectPath</strong>
-            </MudAlert>
-
-            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="@LoadProjectAsync" StartIcon="@Icons.Material.Filled.Refresh">
+            <ProgressButton OnClick="@LoadProjectAsync" StartIcon="@Icons.Material.Filled.Refresh">
                 Load Different Project
-            </MudButton>
+            </ProgressButton>
         }
-    </MudStack>
-</MudPaper>
+    </Actions>
+</PageHeader>
 
 @if (ProjectState.CurrentProject != null)
 {
-    <MudPaper Class="pa-4 mb-4">
+    <MudAlert Severity="Severity.Success" Class="mb-6">
+        Project loaded: <strong>@ProjectState.CurrentProjectPath</strong>
+    </MudAlert>
+}
+
+@if (ProjectState.CurrentProject != null)
+{
+    <MudPaper Class="pa-6 mb-6" Elevation="0">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
             <MudText Typo="Typo.h5">Available Playlists</MudText>
             <MudSpacer />
@@ -74,22 +75,22 @@
                                      Color="Color.Primary" />
                         <MudText><strong>[@index]</strong> @playlist.Name (@playlist.Entry.Count clips)</MudText>
                         <MudSpacer />
-                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
-                                   OnClick="@(() => ShufflePlaylistAsync(index))">
+                        <ProgressButton Size="Size.Small" Color="Color.Primary"
+                                        OnClick="@(() => ShufflePlaylistAsync(index))">
                             Shuffle
-                        </MudButton>
-                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
-                                   OnClick="@(() => ShuffleAndAddToQueueAsync(index))"
-                                   StartIcon="@Icons.Material.Filled.AddToQueue">
+                        </ProgressButton>
+                        <ProgressButton Size="Size.Small" Color="Color.Success"
+                                        OnClick="@(() => ShuffleAndAddToQueueAsync(index))"
+                                        StartIcon="@Icons.Material.Filled.AddToQueue">
                             Add to Queue
-                        </MudButton>
+                        </ProgressButton>
                     </MudStack>
                 </MudListItem>
             }
         </MudList>
     </MudPaper>
 
-    <MudPaper Class="pa-4 mb-4">
+    <MudPaper Class="pa-6 mb-6" Elevation="0">
         <MudText Typo="Typo.h5" Class="mb-3">Generate Random Compilation</MudText>
 
         <MudStack Spacing="3">
@@ -186,16 +187,15 @@
             }
 
             <MudStack Row="true" Spacing="2">
-                <MudButton Variant="Variant.Filled" Color="Color.Success"
-                         OnClick="@GenerateRandomPlaylistAsync" Disabled="@(_selectedPlaylists.Count == 0)">
+                <ProgressButton OnClick="@GenerateRandomPlaylistAsync" Disabled="@(_selectedPlaylists.Count == 0)">
                     Generate Random Playlist
-                </MudButton>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                         OnClick="@GenerateRandomAndAddToQueueAsync"
-                         Disabled="@(_selectedPlaylists.Count == 0)"
-                         StartIcon="@Icons.Material.Filled.AddToQueue">
-                    Generate & Add to Queue
-                </MudButton>
+                </ProgressButton>
+                <ProgressButton Variant="Variant.Filled" Color="Color.Primary"
+                                OnClick="@GenerateRandomAndAddToQueueAsync"
+                                Disabled="@(_selectedPlaylists.Count == 0)"
+                                StartIcon="@Icons.Material.Filled.AddToQueue">
+                    Generate &amp; Add to Queue
+                </ProgressButton>
             </MudStack>
         </MudStack>
     </MudPaper>

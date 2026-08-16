@@ -11,7 +11,30 @@
 
 <PageTitle>Settings - Cheap Shotcut Randomizer</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Settings</MudText>
+<PageHeader Kicker="APPLICATION" Title="Settings" Subtitle="Paths, defaults and system info">
+    <Actions>
+        <MudButton Variant="Variant.Text"
+                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                   OnClick="OpenSettingsFolder">
+            Open Folder
+        </MudButton>
+        <ProgressButton Color="Color.Warning"
+                        StartIcon="@Icons.Material.Filled.RestartAlt"
+                        OnClick="ResetToDefaultsAsync">
+            Reset
+        </ProgressButton>
+        <ProgressButton StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="ReloadSettingsAsync">
+            Reload
+        </ProgressButton>
+        <ProgressButton Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Save"
+                        OnClick="SaveSettingsAsync">
+            Save Settings
+        </ProgressButton>
+    </Actions>
+</PageHeader>
 
 @if (_settings == null)
 {
@@ -21,7 +44,7 @@
 else
 {
     <!-- Centralized Dependency Manager -->
-    <MudPaper Class="pa-4 mb-6" Elevation="3">
+    <MudPaper Class="pa-6 mb-6" Elevation="0">
         <MudStack Spacing="3">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                 <MudText Typo="Typo.h5">
@@ -148,8 +171,8 @@ else
     <MudGrid>
         <!-- Logging Settings -->
         <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.h6" Class="mb-3">
+            <MudPaper Class="pa-6" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-2">
                     <MudIcon Icon="@Icons.Material.Filled.Description" Class="mr-2" />
                     Logging
                 </MudText>
@@ -165,8 +188,8 @@ else
 
         <!-- Application Behavior -->
         <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.h6" Class="mb-3">
+            <MudPaper Class="pa-6" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-2">
                     <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-2" />
                     Application Behavior
                 </MudText>
@@ -188,8 +211,8 @@ else
 
         <!-- SVP Detection -->
         <MudItem xs="12">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.h6" Class="mb-3">
+            <MudPaper Class="pa-6" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-2">
                     <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Class="mr-2" />
                     SmoothVideo Project (SVP) Integration
                 </MudText>
@@ -266,8 +289,8 @@ else
 
         <!-- Render Default Settings -->
         <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.h6" Class="mb-3">
+            <MudPaper Class="pa-6" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-2">
                     <MudIcon Icon="@Icons.Material.Filled.VideoSettings" Class="mr-2" />
                     Default Render Settings
                 </MudText>
@@ -315,38 +338,6 @@ else
             </MudItem>
         }
 
-        <!-- Action Buttons -->
-        <MudItem xs="12">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudStack Row="true" Spacing="3">
-                    <MudButton Variant="Variant.Filled"
-                              Color="Color.Primary"
-                              StartIcon="@Icons.Material.Filled.Save"
-                              OnClick="SaveSettingsAsync">
-                        Save Settings
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined"
-                              Color="Color.Secondary"
-                              StartIcon="@Icons.Material.Filled.Refresh"
-                              OnClick="ReloadSettingsAsync">
-                        Reload
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined"
-                              Color="Color.Warning"
-                              StartIcon="@Icons.Material.Filled.RestartAlt"
-                              OnClick="ResetToDefaultsAsync">
-                        Reset to Defaults
-                    </MudButton>
-                    <MudSpacer />
-                    <MudButton Variant="Variant.Text"
-                              Color="Color.Info"
-                              StartIcon="@Icons.Material.Filled.FolderOpen"
-                              OnClick="OpenSettingsFolder">
-                        Open Settings Folder
-                    </MudButton>
-                </MudStack>
-            </MudPaper>
-        </MudItem>
     </MudGrid>
 }
 

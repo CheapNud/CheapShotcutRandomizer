@@ -1,12 +1,12 @@
 @inherits LayoutComponentBase
 
-<MudThemeProvider @bind-IsDarkMode="@_isDarkMode" />
+<MudThemeProvider Theme="@_theme" @bind-IsDarkMode="@_isDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="1">
+    <MudAppBar Elevation="0" Style="border-bottom: 1px solid var(--mud-palette-lines-default);">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
         <MudText Typo="Typo.h5" Class="ml-3">Cheap Shotcut Randomizer</MudText>
         <MudSpacer />
@@ -16,7 +16,7 @@
                            OnClick="@ToggleDarkMode" />
         </MudTooltip>
     </MudAppBar>
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="1">
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="0">
         <MudDrawerHeader>
             <MudText Typo="Typo.h6">Navigation</MudText>
         </MudDrawerHeader>
@@ -30,7 +30,7 @@
         <MudText Typo="Typo.caption" Class="pa-3" Style="opacity: 0.2;">@CheapShotcutRandomizer.AppVersion.Display</MudText>
     </MudDrawer>
     <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.Large" Class="my-4">
+        <MudContainer MaxWidth="MaxWidth.Large" Class="pt-4 px-6 pb-6">
             @Body
         </MudContainer>
     </MudMainContent>
@@ -39,6 +39,55 @@
 @code {
     private bool _drawerOpen = true;
     private bool _isDarkMode = true;
+
+    // House style: flat surfaces separated by hairline borders and surface contrast,
+    // never shadows. Light = white cards on an off-white field; dark = cards lighter
+    // than the field with the text opacity ladder. The drawer stays dark in both
+    // modes - it is structural chrome, not content.
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Background = "#F4F4F6",
+            Surface = "#FFFFFF",
+            AppbarBackground = "#FFFFFF",
+            AppbarText = "#1F2937",
+            DrawerBackground = "#1F2937",
+            DrawerText = "rgba(255,255,255,0.72)",
+            DrawerIcon = "rgba(255,255,255,0.72)",
+            LinesDefault = "#E0E0E3",
+            TableLines = "#EAEAEC",
+            Divider = "#E0E0E3"
+        },
+        PaletteDark = new PaletteDark
+        {
+            Background = "#121316",
+            Surface = "#1E1F24",
+            AppbarBackground = "#1E1F24",
+            DrawerBackground = "#141519",
+            DrawerText = "rgba(255,255,255,0.72)",
+            DrawerIcon = "rgba(255,255,255,0.72)",
+            TextPrimary = "rgba(255,255,255,0.92)",
+            TextSecondary = "rgba(255,255,255,0.62)",
+            LinesDefault = "rgba(255,255,255,0.12)",
+            TableLines = "rgba(255,255,255,0.10)",
+            Divider = "rgba(255,255,255,0.12)"
+        },
+        LayoutProperties = new LayoutProperties
+        {
+            DefaultBorderRadius = "12px",
+            DrawerWidthLeft = "260px"
+        },
+        // Two fonts, split by role: Bahnschrift (geometric, ships with Windows) for
+        // display headings, Segoe UI (humanist) for everything else
+        Typography = new Typography
+        {
+            H4 = new H4Typography { FontFamily = ["Bahnschrift", "Segoe UI", "sans-serif"] },
+            H5 = new H5Typography { FontFamily = ["Bahnschrift", "Segoe UI", "sans-serif"] },
+            H6 = new H6Typography { FontFamily = ["Bahnschrift", "Segoe UI", "sans-serif"] },
+            Default = new DefaultTypography { FontFamily = ["Segoe UI", "Helvetica", "Arial", "sans-serif"] }
+        }
+    };
 
     private void ToggleDrawer()
     {
