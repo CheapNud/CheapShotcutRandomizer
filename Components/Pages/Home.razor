@@ -134,6 +134,26 @@
                 </MudText>
             </MudStack>
 
+            <MudStack Spacing="1">
+                <MudSelect @bind-Value="_gridLayout"
+                           Label="Layout"
+                           Variant="Variant.Outlined"
+                           T="int"
+                           Margin="Margin.Dense"
+                           Style="max-width: 320px;">
+                    <MudSelectItem Value="1" T="int">Single (one track)</MudSelectItem>
+                    <MudSelectItem Value="2" T="int">Split screen (2 side by side)</MudSelectItem>
+                    <MudSelectItem Value="4" T="int">Grid (2 × 2)</MudSelectItem>
+                </MudSelect>
+                @if (_gridLayout > 1)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Generates @_gridLayout independent random tracks shown simultaneously.
+                        Audio from all cells is mixed together.
+                    </MudText>
+                }
+            </MudStack>
+
             @if (_selectedPlaylists.Count > 0)
             {
                 <MudText Typo="Typo.subtitle1" Class="mt-2">Target Duration for Each Playlist:</MudText>
@@ -205,6 +225,7 @@
 @code {
     private double _durationWeight = 4.0;
     private double _numberOfVideosWeight = 0.8;
+    private int _gridLayout = 1;
     private bool _avoidConsecutiveSameSource = true;
     private HashSet<int> _selectedPlaylists = [];
     private Dictionary<int, int> _targetSeconds = new();
@@ -499,24 +520,46 @@
                 .Select(idx => (idx, _targetSeconds.GetValueOrDefault(idx, 0)))
                 .ToList();
 
-            var (newPlaylist, trackIndex) = ShotcutSvc.GenerateRandomPlaylist(
-                projectCopy,
-                sourcePlaylists,
-                _durationWeight,
-                _numberOfVideosWeight
-            );
+            string preSelectedTracks;
+            string baseName;
+
+            if (_gridLayout > 1)
+            {
+                // Split-screen: N independent random tracks, each SPR-filtered into a grid cell
+                var trackIndices = ShotcutSvc.GenerateGridCompilation(
+                    projectCopy,
+                    sourcePlaylists,
+                    _durationWeight,
+                    _numberOfVideosWeight,
+                    _gridLayout
+                );
+
+                preSelectedTracks = string.Join(",", trackIndices);
+                baseName = $"grid{_gridLayout}_random";
+            }
+            else
+            {
+                var (newPlaylist, trackIndex) = ShotcutSvc.GenerateRandomPlaylist(
+                    projectCopy,
+                    sourcePlaylists,
+                    _durationWeight,
+                    _numberOfVideosWeight
+                );
+
+                preSelectedTracks = trackIndex.ToString();
+                baseName = $"random_{newPlaylist.Name}".Replace(" ", "_");
+            }
 
             // Save to temp file
-            var baseName = $"random_{newPlaylist.Name}".Replace(" ", "_");
             var tempPath = await SaveGeneratedProjectAsync(projectCopy, baseName);
 
-            // Hand off to the Add Render Job stepper with the generated track pre-selected
+            // Hand off to the Add Render Job stepper with the generated track(s) pre-selected
             // Generated playlists are always video tracks (with audio)
             Draft.SourcePath = tempPath;
             Draft.ShowTrackSelection = false;
             Draft.ShowRenderRange = false;
-            Draft.PreSelectedVideoTracks = trackIndex.ToString();
-            Draft.PreSelectedAudioTracks = null; // The video track includes audio
+            Draft.PreSelectedVideoTracks = preSelectedTracks;
+            Draft.PreSelectedAudioTracks = null; // The video tracks include audio
 
             NavigationManager.NavigateTo("/add-job");
         }

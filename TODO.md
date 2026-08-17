@@ -44,6 +44,7 @@ _Nothing planned._
 
 ## Done
 
+- [x] (2026-08-17 → 2026-08-17) Grid compilations: generate 2-up or 2x2 split-screen from random tracks via SPR (affine) filters + mix/qtblend transitions, melt-verified [user]
 - [x] (2026-08-17 → 2026-08-17) Docs refresh: README/CHANGELOG rewritten for the current app, stale AI-era docs pruned [user]
 - [x] (2026-08-09 → 2026-08-17) Prune CI docs bloat (.github/WORKFLOWS*.md + archive, ~2,100 lines about CI) [audit]
 - [x] (2026-08-16 → 2026-08-16) Apply global MudBlazor house style: flat theme with hairline borders, two-font typography, PageHeader/ProgressButton components, one-CTA rule, semantic status chips [user]
