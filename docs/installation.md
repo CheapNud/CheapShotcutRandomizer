@@ -12,19 +12,11 @@ Setup instructions for CheapShotcutRandomizer dependencies.
 
 ### Using the Dependency Manager (Recommended)
 
-1. **Launch the Application**
-2. **Navigate to Dependency Manager** (from the main menu)
-3. **Review Dependency Status** - The manager automatically detects installed dependencies
-4. **Install Missing Dependencies** - Click "Install Missing" or install individual dependencies
-5. **Verify Installation** - Click "Refresh Status" to re-check after installation
+1. **Install [Shotcut](https://shotcut.org/download/)** - provides melt (the renderer) and the export preset library
+2. **Launch the Application** - Settings shows detected FFmpeg/FFprobe/Melt paths (SVP's bundled FFmpeg is preferred when present)
+3. **Adjust paths if needed** - use the browse buttons on the Settings dependency table for non-standard install locations
 
-The Dependency Manager handles:
-- Automatic detection of installed tools (FFmpeg, FFprobe, Melt)
-- Guided installation with multiple strategies (Chocolatey, portable, installer)
-- Real-time verification of dependency versions and compatibility
-- Integration with existing installations (detects Shotcut)
-
-**For advanced users or manual installation, see the detailed instructions below.**
+**For manual installation details, see below.**
 
 ---
 
