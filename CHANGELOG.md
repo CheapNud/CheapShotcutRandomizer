@@ -1,160 +1,72 @@
 # Changelog
 
-All notable changes to the Cheap Shotcut Randomizer project will be documented in this file.
+All notable changes to Cheap Shotcut Randomizer are documented here, grouped per minor release.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
+## [2.8.x] - 2026-08
 
 ### Added
-- **Documentation Consolidation**: Reorganized all documentation into modular structure
-  - Created `docs/features/` directory with dedicated docs for RIFE, Real-CUGAN, Real-ESRGAN, Non-AI Upscaling, and VapourSynth
-  - Created `docs/architecture/` directory for implementation details
-  - Consolidated GitHub Actions workflows into single comprehensive guide (`.github/WORKFLOWS.md`)
-  - Enhanced `docs/README.md` as central documentation hub
-- **VapourSynthEnvironment Service**: Centralized Python and VapourSynth detection
-  - Automatic SVP Python detection with priority over system PATH
-  - Consolidated environment management for all AI services (Real-CUGAN, Real-ESRGAN, RIFE)
-  - Removed ~220+ lines of duplicate detection code
-- **DebugLogger Utility**: Centralized logging with VerboseLogging flag support
-  - `Log()`, `LogError()`, `LogWarning()` - Always log (errors, lifecycle events)
-  - `LogVerbose()` - Only logs when VerboseLogging enabled (paths, progress, subprocess output)
-  - Lazy initialization from settings file
-- **DependencyChecker Service**: Comprehensive dependency detection and validation
-  - Automatic detection of installed tools (FFmpeg, melt, VapourSynth, Python)
-  - Real-time validation of dependency versions and compatibility
-  - Shows which Python installation is being used (SVP vs System PATH)
-- **DependencyManager UI**: Interactive dependency management page
-  - One-click installation for missing dependencies
-  - Real-time status checking with detailed error messages
-  - Integration with existing installations (Shotcut, SVP, etc.)
-- **GitHub Actions CI/CD**: Complete workflow automation
-  - Build, test, and quality checks on every push
-  - CodeQL security scanning
-  - Automated release builds with GitHub Releases
-  - Code coverage reporting
-  - Auto-labeling for pull requests
-- **MudBlazor 8.10.0 Compatibility**: Fixed all MUD0002 analyzer warnings
-  - Updated `MudStack` Direction attributes to use `Row` boolean property
-  - Removed invalid `AlignItems` attribute from `MudGrid`
+- House UI style: flat theme with hairline borders, surface-contrast light/dark palettes, Bahnschrift/Segoe UI typography, page headers with kicker/title/actions, progress buttons on all async actions, semantic status colours
+- Searchable export-preset picker with recommended presets pinned on top
+- Hardware encoders listed above CPU encoders in the encoder selection
+- App version shown at the bottom of the navigation drawer
+- Release retention: the release workflow keeps only the newest 3 releases (tags always remain)
 
 ### Changed
-- **Installation Documentation**: Updated all docs to reference DependencyManager as primary installation method
-  - `docs/installation.md`: Condensed from 470 to 263 lines with links to feature docs
-  - `REALCUGAN_INSTALLATION.md`: Moved to `docs/features/real-cugan.md`
-  - Manual installation instructions relabeled as "Advanced/Manual Installation"
-  - SVP Python auto-detection highlighted throughout
-- **Real-CUGAN Color Space Fix**: Added YUV420P16 conversion to prevent Y4M format errors
-  - Fixed "can only apply y4m headers to YUV and Gray format clips" error
-  - Proper Rec. 709 matrix for HD/1080p+ content
-- **AI Services Refactoring**: Updated RealCuganService, RealEsrganService to use VapourSynthEnvironment
-  - Dependency injection for environment detection
-  - Consistent Python/vspipe detection across all services
-- **RenderQueueService**: Fixed service instantiation to use DI container
-  - Replaced `new RealEsrganService()` with `GetRequiredService<>`
-  - Replaced `new RealCuganService()` with `GetRequiredService<>`
-  - Proper dependency injection for VapourSynthEnvironment
+- Hardware capabilities panel moved from the Render Queue to Settings
 
-### Removed
-- **Duplicate Documentation**:
-  - `REALCUGAN_INSTALLATION.md` (root) - merged into `docs/features/real-cugan.md`
-  - `NON_AI_UPSCALING_IMPLEMENTATION.md` (root) - split into user/dev docs
-  - `CheapShotcutRandomizer.Tests/SETUP_COMPLETE.md` - historical artifact
-  - `.github/QUICK_START.md` - merged into `.github/WORKFLOWS.md`
-  - `.github/WORKFLOW_SUMMARY.md` - merged into `.github/WORKFLOWS.md`
-- **Duplicate Code**: Removed ~220+ lines of duplicate Python/vspipe detection across AI services
+## [2.7.x] - 2026-08
+
+### Added
+- Post-completion job actions: move output to a folder or reveal in Explorer
+- Added-on timestamp on render queue job cards
+
+### Changed
+- Generated shuffle/random projects moved to the app temp folder and are deleted once their job finishes (with a startup sweep for crash leftovers)
+- Melt invocation adopts Shotcut's exact shape: consumer embedded as an XML element, percent-encoded producer URL, multi consumer for resolution/frame-rate overrides, absolute-path render XML
+- Forge workflows moved from `.gitea/` to `.forgejo/`
 
 ### Fixed
-- **Build Warnings**: Resolved all MudBlazor MUD0002 analyzer warnings (9 total)
-- **Real-CUGAN Y4M Error**: Fixed color space conversion issue for vspipe output
-- **Python Detection Chaos**: Unified Python detection logic with clear SVP priority
-- **Filename Length Issues**: Shortened GUID usage from 32 to 8 characters
-- **Track Selection Bugs**: Fixed audio/track selection when shuffling/generating playlists
-- **Clear All Jobs**: Added complete functionality with confirmation dialog
+- `Entry.Duration` no longer throws on MLT entries missing in/out attributes
 
-## [Previous Commits]
+## [2.5.0 - 2.6.0] - 2026-08
 
-### [2025-01-XX] - TensorRT and Real-CUGAN Updates
-- Updated TensorRT and Real-CUGAN installation logic
-- Reset database schema
+### Added
+- True pause/resume: pausing a render suspends the melt process in place instead of killing it
+- Stock MLT/Shotcut export presets offered in the render stepper
+- Pre-flight checks on the review step: missing media files, duplicate output targets, low disk space
+- Failed renders retry once in single-threaded safe mode
+- Keep-awake during renders; honest ETA (baselined at first progress, hidden below 2%)
+- Proxy-resource guard and playlist autoclose on render XML
 
-### [2025-01-XX] - Dependency Management
-- Added Dependency Management and AI Upscaling Services
-- Implemented comprehensive dependency checking
+### Changed
+- Encoder quality flags verified against the Shotcut source: `qscale` for QSV, `qp_i/qp_p/qp_b` for AMF, `x265-params` for x265, audio `vbr` markers, codec `threads`, Shotcut-parity GOP/B-frames, `real_time` capped at 4, melt runs at below-normal priority
 
-### [2025-01-XX] - RIFE Integration
-- WORKING RIFE implementation
-- Enhanced app with settings, dark mode, and SVP integration
-- Added robust video rendering pipeline with RIFE support
+## [2.4.0] - 2026-08
 
-### [2025-01-XX] - Initial Features
-- Added file search and avoid consecutive clips feature
-- Enhanced playlist UI and refactored XML handling
-- Refactored namespaces and improved project structure
-- Initial project files and setup
+### Changed
+- Queue-first UI: the render queue is the home page; adding a job is a full-page stepper (Source → Video → Audio → Tracks & Range → Review); the popup dialog was removed; Randomizer and Find Files became their own pages
+- Settings that were silently ignored now take effect: max concurrent renders, auto-start queue, completion notifications; the dead quality dropdown was removed
 
----
+## [2.2.x - 2.3.0] - 2026-08
 
-## Migration Notes
+### Added
+- Video encoder selection: x264/x265 plus detected NVENC/QSV/AMF hardware encoders
+- Resolution, aspect ratio and frame rate overrides; audio codec, bitrate and quality-based VBR
+- Added-date display on queue jobs
 
-### Documentation Structure Changes
+## [2.1.0] - 2026-08
 
-**Before**:
-```
-/
-├── README.md
-├── REALCUGAN_INSTALLATION.md
-├── NON_AI_UPSCALING_IMPLEMENTATION.md
-├── GRACEFUL_SHUTDOWN.md
-├── docs/
-│   ├── README.md (minimal)
-│   ├── installation.md (470 lines, all features)
-│   ├── hardware.md
-│   └── development.md
-└── .github/
-    ├── QUICK_START.md
-    ├── WORKFLOWS_README.md
-    └── WORKFLOW_SUMMARY.md
-```
+### Removed
+- ~5,000 lines of dead code left from the CheapUpscaler split (orphaned AI installer, unused FFmpeg render stack, duplicate dependency UIs) and the SharpCompress/FFMpegCore/Polly package references
 
-**After**:
-```
-/
-├── README.md
-├── CHANGELOG.md (NEW)
-├── docs/
-│   ├── README.md (enhanced index)
-│   ├── installation.md (263 lines, references features/)
-│   ├── hardware.md
-│   ├── development.md
-│   ├── features/ (NEW)
-│   │   ├── rife.md
-│   │   ├── real-cugan.md
-│   │   ├── real-esrgan.md
-│   │   ├── non-ai-upscaling.md
-│   │   └── vapoursynth.md
-│   └── architecture/ (NEW)
-│       └── graceful-shutdown.md
-└── .github/
-    ├── WORKFLOWS.md (NEW - consolidated)
-    └── archive/
-        └── WORKFLOW_ENHANCEMENTS.md
-```
+### Fixed
+- Cancelled/paused jobs no longer resurrect through the retry path
+- Playlist blanks keep their timeline position across XML round-trips
+- Transient SQLite errors no longer wipe the render queue database
+- Queue pause races, atomic job claiming, component disposal guards, and a dozen smaller audit findings
 
-### Service Architecture Changes
+## [2.0.0] - 2026-08
 
-**VapourSynthEnvironment** is now the single source of truth for:
-- Python path detection (SVP → System PATH)
-- vspipe executable location
-- Version information for both Python and VapourSynth
-
-All AI services (RealCuganService, RealEsrganService, RifeInterpolationService) now use this centralized service instead of duplicate detection logic.
-
-**DependencyChecker** now reports which Python installation is actually being used:
-- "Python 3.11.5 (SVP's Python)" - when using SVP's bundled Python
-- "Python 3.11.5 (System PATH)" - when using system Python
-
----
-
-[Unreleased]: https://github.com/CheapNud/ShotcutRandomizer/compare/master...HEAD
+### Changed
+- Upgraded to .NET 11 and current package versions; migrated to slnx; SharpCompress 0.50 API migration
+- Repository moved to forge-first hosting with an automated release pipeline
