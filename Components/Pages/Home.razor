@@ -147,8 +147,19 @@
                 </MudSelect>
                 @if (_gridLayout > 1)
                 {
+                    <MudSelect @bind-Value="_gridSplit"
+                               Label="Cell Content"
+                               Variant="Variant.Outlined"
+                               T="bool"
+                               Margin="Margin.Dense"
+                               Style="max-width: 320px;">
+                        <MudSelectItem Value="false" T="bool">Independent random per cell</MudSelectItem>
+                        <MudSelectItem Value="true" T="bool">One compilation split across cells</MudSelectItem>
+                    </MudSelect>
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        Generates @_gridLayout independent random tracks shown simultaneously.
+                        @(_gridSplit
+                            ? $"One compilation carved into {_gridLayout} consecutive segments playing simultaneously — total runtime ≈ 1/{_gridLayout} of the compilation."
+                            : $"Generates {_gridLayout} independent random tracks shown simultaneously.")
                         Audio from all cells is mixed together.
                     </MudText>
                 }
@@ -226,6 +237,7 @@
     private double _durationWeight = 4.0;
     private double _numberOfVideosWeight = 0.8;
     private int _gridLayout = 1;
+    private bool _gridSplit = false;
     private bool _avoidConsecutiveSameSource = true;
     private HashSet<int> _selectedPlaylists = [];
     private Dictionary<int, int> _targetSeconds = new();
@@ -531,11 +543,12 @@
                     sourcePlaylists,
                     _durationWeight,
                     _numberOfVideosWeight,
-                    _gridLayout
+                    _gridLayout,
+                    _gridSplit
                 );
 
                 preSelectedTracks = string.Join(",", trackIndices);
-                baseName = $"grid{_gridLayout}_random";
+                baseName = _gridSplit ? $"grid{_gridLayout}_split" : $"grid{_gridLayout}_random";
             }
             else
             {
