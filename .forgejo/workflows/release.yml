@@ -5,8 +5,8 @@ on:
     tags:
       - 'v*.*.*'
 
-permissions:
-  contents: write
+# No permissions block: Forgejo ignores it (GitHub Actions syntax) and newer
+# versions warn about it - the injected token already carries the needed rights
 
 jobs:
   release:
