@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapShotcutRandomizer project work tracker
-  Last updated: 2026-08-17
+  Last updated: 2026-08-20
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -43,6 +43,8 @@ _Nothing planned._
 - [ ] (2026-08-09) RenderQueueService minors: progress-throttle races, Task.Run token drops shutdown work, StopAsync delay token, event-subscriber isolation [audit]
 
 ## Done
+
+- [x] (2026-08-20 → 2026-08-20) Grid split mode: one compilation carved into duration-balanced consecutive segments across the cells [user]
 
 - [x] (2026-08-17 → 2026-08-17) Grid compilations: generate 2-up or 2x2 split-screen from random tracks via SPR (affine) filters + mix/qtblend transitions, melt-verified [user]
 - [x] (2026-08-17 → 2026-08-17) Docs refresh: README/CHANGELOG rewritten for the current app, stale AI-era docs pruned [user]

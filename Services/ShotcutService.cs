@@ -203,7 +203,11 @@ public class ShotcutService(IXmlService xmlService)
         return result;
     }
 
-    public (Playlist Playlist, int TrackIndex) GenerateRandomPlaylist(
+    /// <summary>
+    /// Run the simulated-annealing selection over the chosen source playlists and
+    /// return the shuffled entry sequence for one compilation.
+    /// </summary>
+    private static List<Entry> SelectRandomEntries(
         Mlt project,
         List<(int PlaylistIndex, int TargetDurationSeconds)> sourcePlaylists,
         double durationWeight,
@@ -231,20 +235,26 @@ public class ShotcutService(IXmlService xmlService)
             allVideos.AddRange(selectedVideos);
         }
 
-        var finalVideos = new SimulatedAnnealingVideoSelector(totalTargetDuration, durationWeight, numberOfVideosWeight)
+        return new SimulatedAnnealingVideoSelector(totalTargetDuration, durationWeight, numberOfVideosWeight)
             .SelectVideos(allVideos)
             .Shuffle()
             .ToList();
+    }
 
+    /// <summary>
+    /// Add a generated entry sequence to the project as a new playlist + tractor track.
+    /// </summary>
+    private (Playlist Playlist, int TrackIndex) AddGeneratedTrack(Mlt project, List<Entry> entries, string trackName)
+    {
         var newPlaylist = new Playlist
         {
-            Entry = finalVideos,
+            Entry = entries,
             Blank = [], // No blanks in generated playlists
             Id = $"playlist{project.Playlist.Count + 1}",
             Property =
             [
                 new() { Name = "shotcut:video", Text = "1" },
-                new() { Name = "shotcut:name", Text = "generated" }
+                new() { Name = "shotcut:name", Text = trackName }
             ]
         };
 
@@ -256,6 +266,18 @@ public class ShotcutService(IXmlService xmlService)
         var mainTractor = project.Tractor.First(x => x.Property.Any(y => y.Name == "shotcut"));
         var newTrackIndex = mainTractor.Track.Count; // Index where the new track will be added
         mainTractor.Track.Add(new Track { Producer = newPlaylist.Id });
+
+        return (newPlaylist, newTrackIndex);
+    }
+
+    public (Playlist Playlist, int TrackIndex) GenerateRandomPlaylist(
+        Mlt project,
+        List<(int PlaylistIndex, int TargetDurationSeconds)> sourcePlaylists,
+        double durationWeight,
+        double numberOfVideosWeight)
+    {
+        var finalVideos = SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight);
+        var (newPlaylist, newTrackIndex) = AddGeneratedTrack(project, finalVideos, "generated");
 
         // Set render range to match the generated playlist duration
         SetRenderRangeToPlaylistDuration(project, newPlaylist);
@@ -275,7 +297,8 @@ public class ShotcutService(IXmlService xmlService)
         List<(int PlaylistIndex, int TargetDurationSeconds)> sourcePlaylists,
         double durationWeight,
         double numberOfVideosWeight,
-        int cells)
+        int cells,
+        bool splitSingleCompilation = false)
     {
         if (cells is not (2 or 4))
             throw new ArgumentException("Grid layout supports 2 or 4 cells", nameof(cells));
@@ -284,19 +307,35 @@ public class ShotcutService(IXmlService xmlService)
         var profileHeight = int.TryParse(project.Profile?.Height, out var parsedHeight) ? parsedHeight : 1080;
         var cellRects = BuildCellRects(profileWidth, profileHeight, cells);
 
+        // Independent mode: every cell is its own random compilation.
+        // Split mode: ONE compilation carved into consecutive, duration-balanced
+        // segments that play simultaneously (a 40 min sequence becomes ~10 min of 4-up).
+        List<List<Entry>> cellEntries;
+        if (splitSingleCompilation)
+        {
+            var compilation = SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight);
+            cellEntries = SplitEvenlyByDuration(compilation, cells);
+        }
+        else
+        {
+            cellEntries = [.. Enumerable.Range(0, cells)
+                .Select(_ => SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight))];
+        }
+
         var trackIndices = new List<int>();
         Playlist? longestPlaylist = null;
         var longestDuration = -1;
 
         for (int cell = 0; cell < cells; cell++)
         {
-            var (playlist, trackIndex) = GenerateRandomPlaylist(project, sourcePlaylists, durationWeight, numberOfVideosWeight);
-
-            var nameProperty = playlist.Property.FirstOrDefault(p => p.Name == "shotcut:name");
-            if (nameProperty != null)
+            // Fewer clips than cells: skip the unfillable cell rather than adding
+            // an empty track (the cell simply shows the background)
+            if (cellEntries[cell].Count == 0)
             {
-                nameProperty.Text = $"grid {cell + 1}";
+                continue;
             }
+
+            var (playlist, trackIndex) = AddGeneratedTrack(project, cellEntries[cell], $"grid {cell + 1}");
 
             // Size Position Rotate filter placing this track in its grid cell.
             // shotcut:filter marks it so Shotcut's UI shows it as an editable SPR filter.
@@ -334,6 +373,43 @@ public class ShotcutService(IXmlService xmlService)
         }
 
         return trackIndices;
+    }
+
+    /// <summary>
+    /// Split an entry sequence into N consecutive chunks balanced by duration
+    /// (greedy contiguous partition; the last chunk absorbs any remainder).
+    /// </summary>
+    private static List<List<Entry>> SplitEvenlyByDuration(List<Entry> entries, int parts)
+    {
+        var chunks = Enumerable.Range(0, parts).Select(_ => new List<Entry>()).ToList();
+        var totalDuration = entries.Sum(e => e.Duration);
+        var targetPerPart = totalDuration / (double)parts;
+
+        var part = 0;
+        double accumulated = 0;
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            var remainingEntries = entries.Count - i;
+            var partsAfterCurrent = parts - part - 1;
+
+            // Advance once this part has its duration share - but never past a part
+            // that got nothing (a single long clip must not vault over chunks), and
+            // force-advance when the tail entries are just enough to fill the rest
+            var shouldAdvance = part < parts - 1
+                && chunks[part].Count > 0
+                && (accumulated >= targetPerPart * (part + 1) || remainingEntries <= partsAfterCurrent);
+
+            if (shouldAdvance)
+            {
+                part++;
+            }
+
+            chunks[part].Add(entries[i]);
+            accumulated += entries[i].Duration;
+        }
+
+        return chunks;
     }
 
     private static List<string> BuildCellRects(int width, int height, int cells)
