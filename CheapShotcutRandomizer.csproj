@@ -25,6 +25,10 @@
     <Copyright>Copyright © Cheap Software Solutions</Copyright>
     <Version>2.0.0</Version>
 
+    <!-- No precompressed (.br/.gz) static asset twins in the publish output -
+         the app serves a local webview, compression only adds sibling files -->
+    <CompressionEnabled>false</CompressionEnabled>
+
     <!-- Single-file publish settings -->
     <!-- Note: SelfContained removed from csproj to allow test project references (NETSDK1151).
          Use: dotnet publish -c Release with the self-contained flag -->
@@ -57,6 +61,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
 
   <ItemGroup>

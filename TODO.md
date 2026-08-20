@@ -36,6 +36,8 @@ _Nothing planned._
 
 ## Future
 
+- [ ] (2026-08-20) Hoist Velopack integration into CheapAvaloniaBlazor as a WithVelopack() opt-in once proven here [user]
+- [ ] (2026-08-20) Embedded-wwwroot single-exe serving — CheapAvaloniaBlazor feature, cosmetic once the installer exists [user]
 - [ ] (2026-08-09) Fold Core project into main project (or strip to plain Sdk); split not earning its keep [audit]
 - [ ] (2026-08-09) Add @key to RenderQueue job list foreach; skip 5s poll when paused and idle [audit]
 - [ ] (2026-08-09) BackgroundTaskQueue full+paused hangs Add-job UI call — pass cancellation to WriteAsync [audit]
@@ -43,6 +45,8 @@ _Nothing planned._
 - [ ] (2026-08-09) RenderQueueService minors: progress-throttle races, Task.Run token drops shutdown work, StopAsync delay token, event-subscriber isolation [audit]
 
 ## Done
+
+- [x] (2026-08-20 → 2026-08-20) Velopack PoC: installer + LAN auto-update from forge releases (restart-to-apply button in nav), vpk owns release packaging; dropped .br/.gz publish twins [user]
 
 - [x] (2026-08-20 → 2026-08-20) Grid split mode: one compilation carved into duration-balanced consecutive segments across the cells [user]
 
