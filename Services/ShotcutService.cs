@@ -328,6 +328,13 @@ public class ShotcutService(IXmlService xmlService)
 
         for (int cell = 0; cell < cells; cell++)
         {
+            // Fewer clips than cells: skip the unfillable cell rather than adding
+            // an empty track (the cell simply shows the background)
+            if (cellEntries[cell].Count == 0)
+            {
+                continue;
+            }
+
             var (playlist, trackIndex) = AddGeneratedTrack(project, cellEntries[cell], $"grid {cell + 1}");
 
             // Size Position Rotate filter placing this track in its grid cell.
@@ -381,15 +388,25 @@ public class ShotcutService(IXmlService xmlService)
         var part = 0;
         double accumulated = 0;
 
-        foreach (var entry in entries)
+        for (int i = 0; i < entries.Count; i++)
         {
-            if (part < parts - 1 && accumulated >= targetPerPart * (part + 1))
+            var remainingEntries = entries.Count - i;
+            var partsAfterCurrent = parts - part - 1;
+
+            // Advance once this part has its duration share - but never past a part
+            // that got nothing (a single long clip must not vault over chunks), and
+            // force-advance when the tail entries are just enough to fill the rest
+            var shouldAdvance = part < parts - 1
+                && chunks[part].Count > 0
+                && (accumulated >= targetPerPart * (part + 1) || remainingEntries <= partsAfterCurrent);
+
+            if (shouldAdvance)
             {
                 part++;
             }
 
-            chunks[part].Add(entry);
-            accumulated += entry.Duration;
+            chunks[part].Add(entries[i]);
+            accumulated += entries[i].Duration;
         }
 
         return chunks;

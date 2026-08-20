@@ -83,6 +83,37 @@ public class ShotcutServiceGridTests
     }
 
     [Fact]
+    public void SplitMode_Lopsided_Durations_Leave_No_Empty_Cells()
+    {
+        var project = BuildProject(sourceEntries: 4, entrySeconds: 10);
+        // Make the first clip dominate the total duration
+        project.Playlist[1].Entry[0].Out = "00:10:00.000";
+        var shotcutService = new ShotcutService(new Mock<IXmlService>().Object);
+
+        shotcutService.GenerateGridCompilation(
+            project, [(1, 0)], 0, 1, cells: 4, splitSingleCompilation: true);
+
+        var cellPlaylists = project.Playlist.Skip(2).ToList();
+        cellPlaylists.Should().HaveCount(4);
+        cellPlaylists.Should().OnlyContain(p => p.Entry.Count > 0,
+            "a single long clip must not vault the partition over cells");
+    }
+
+    [Fact]
+    public void SplitMode_Fewer_Clips_Than_Cells_Skips_Unfillable_Cells()
+    {
+        var project = BuildProject(sourceEntries: 3, entrySeconds: 10);
+        var shotcutService = new ShotcutService(new Mock<IXmlService>().Object);
+
+        var trackIndices = shotcutService.GenerateGridCompilation(
+            project, [(1, 0)], 0, 1, cells: 4, splitSingleCompilation: true);
+
+        trackIndices.Should().HaveCountLessThanOrEqualTo(3);
+        project.Playlist.Skip(2).Should().OnlyContain(p => p.Entry.Count > 0,
+            "no empty cell playlists are ever added");
+    }
+
+    [Fact]
     public void IndependentMode_Generates_A_Compilation_Per_Cell()
     {
         var project = BuildProject(sourceEntries: 8, entrySeconds: 10);
