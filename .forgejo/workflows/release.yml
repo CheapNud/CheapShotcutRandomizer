@@ -48,7 +48,8 @@ jobs:
                    --packAuthors "CheapNud"
           if ($LASTEXITCODE -ne 0) { throw "vpk pack failed ($LASTEXITCODE)" }
 
-          vpk upload gitea --repoUrl $repoUrl --token $token --publish
+          vpk upload gitea --repoUrl $repoUrl --token $token --publish `
+                    --tag "${{ github.ref_name }}" --releaseName "CheapShotcutRandomizer $ver"
           if ($LASTEXITCODE -ne 0) { throw "vpk upload failed ($LASTEXITCODE)" }
 
           Write-Host "Published release $ver via Velopack (Setup.exe + Portable.zip + update packages)"
