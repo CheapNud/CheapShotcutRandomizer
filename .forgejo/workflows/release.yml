@@ -20,9 +20,15 @@ jobs:
 
       - name: Build, package, and publish to Forgejo
         shell: powershell
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $ver = "${{ github.ref_name }}".TrimStart('v')
+
+          # The tag is a trust boundary: passed via env (never interpolated into the
+          # script) and validated before it touches any command line
+          if ($env:REF_NAME -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw "unexpected tag format: $env:REF_NAME" }
+          $ver = $env:REF_NAME.TrimStart('v')
 
           powershell -ExecutionPolicy Bypass -File deploy/publish.ps1 -Version $ver
           if ($LASTEXITCODE -ne 0) { throw "publish failed ($LASTEXITCODE)" }
@@ -49,7 +55,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "vpk pack failed ($LASTEXITCODE)" }
 
           vpk upload gitea --repoUrl $repoUrl --token $token --publish `
-                    --tag "${{ github.ref_name }}" --releaseName "CheapShotcutRandomizer $ver"
+                    --tag $env:REF_NAME --releaseName "CheapShotcutRandomizer $ver"
           if ($LASTEXITCODE -ne 0) { throw "vpk upload failed ($LASTEXITCODE)" }
 
           Write-Host "Published release $ver via Velopack (Setup.exe + Portable.zip + update packages)"
