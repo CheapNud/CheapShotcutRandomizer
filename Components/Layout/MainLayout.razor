@@ -1,4 +1,6 @@
 @inherits LayoutComponentBase
+@inject CheapShotcutRandomizer.Services.UpdateService Updates
+@implements IDisposable
 
 <MudThemeProvider Theme="@_theme" @bind-IsDarkMode="@_isDarkMode" />
 <MudPopoverProvider />
@@ -27,6 +29,17 @@
             <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
         </MudNavMenu>
         <MudSpacer />
+        @if (Updates.UpdateReady)
+        {
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Success"
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.SystemUpdateAlt"
+                       Class="ma-2"
+                       OnClick="@(() => Updates.ApplyAndRestart())">
+                Update @Updates.PendingVersion ready — restart
+            </MudButton>
+        }
         <MudText Typo="Typo.caption" Class="pa-3" Style="opacity: 0.2;">@CheapShotcutRandomizer.AppVersion.Display</MudText>
     </MudDrawer>
     <MudMainContent>
@@ -88,6 +101,24 @@
             Default = new DefaultTypography { FontFamily = ["Segoe UI", "Helvetica", "Arial", "sans-serif"] }
         }
     };
+
+    protected override void OnInitialized()
+    {
+        Updates.StateChanged += OnUpdateStateChanged;
+
+        // Background update check - best-effort, never blocks startup
+        _ = Updates.CheckAndDownloadAsync();
+    }
+
+    private void OnUpdateStateChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Updates.StateChanged -= OnUpdateStateChanged;
+    }
 
     private void ToggleDrawer()
     {
