@@ -1,5 +1,5 @@
 @inherits LayoutComponentBase
-@inject CheapShotcutRandomizer.Services.UpdateService Updates
+@inject CheapAvaloniaBlazor.Services.IUpdateService Updates
 @implements IDisposable
 
 <MudThemeProvider Theme="@_theme" @bind-IsDarkMode="@_isDarkMode" />
@@ -104,10 +104,8 @@
 
     protected override void OnInitialized()
     {
+        // Check + download runs automatically in the background (WithVelopackUpdates)
         Updates.StateChanged += OnUpdateStateChanged;
-
-        // Background update check - best-effort, never blocks startup
-        _ = Updates.CheckAndDownloadAsync();
     }
 
     private void OnUpdateStateChanged()

@@ -36,7 +36,6 @@ _Nothing planned._
 
 ## Future
 
-- [ ] (2026-08-20) Hoist Velopack integration into CheapAvaloniaBlazor as a WithVelopack() opt-in once proven here [user]
 - [ ] (2026-08-20) Embedded-wwwroot single-exe serving — CheapAvaloniaBlazor feature, cosmetic once the installer exists [user]
 - [ ] (2026-08-09) Fold Core project into main project (or strip to plain Sdk); split not earning its keep [audit]
 - [ ] (2026-08-09) Add @key to RenderQueue job list foreach; skip 5s poll when paused and idle [audit]
@@ -46,6 +45,7 @@ _Nothing planned._
 
 ## Done
 
+- [x] (2026-08-20 → 2026-08-22) Hoist Velopack integration into CheapAvaloniaBlazor: lib 3.3.0 ships WithVelopackUpdates()/IUpdateService, local PoC UpdateService deleted; all NuGet packages updated, tests moved to xunit.v3 4.0 on Microsoft.Testing.Platform [user]
 - [x] (2026-08-20 → 2026-08-20) Velopack PoC: installer + LAN auto-update from forge releases (restart-to-apply button in nav), vpk owns release packaging; dropped .br/.gz publish twins [user]
 
 - [x] (2026-08-20 → 2026-08-20) Grid split mode: one compilation carved into duration-balanced consecutive segments across the cells [user]

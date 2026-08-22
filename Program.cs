@@ -18,13 +18,10 @@ class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        // Velopack must run first: it handles install/update/uninstall hooks and
-        // exits early during those lifecycle events
-        Velopack.VelopackApp.Build().Run();
-
         var builder = new CheapAvaloniaBlazor.Hosting.HostBuilder()
             .WithTitle("Cheap Shotcut Randomizer")
             .WithSize(1000, 800)
+            .WithVelopackUpdates("http://192.168.1.15:3000/cheapnud/CheapShotcutRandomizer")
             .ConfigureOptions(options =>
             {
                 options.EnableDevTools = false;
@@ -46,7 +43,6 @@ class Program
         builder.Services.AddSingleton<RenderJobDraftService>(); // Carries drafts from Randomizer to the add-job stepper
         builder.Services.AddSingleton<RenderProcessRegistry>(); // In-place pause/resume of melt processes
         builder.Services.AddSingleton<ExportPresetService>();   // Stock MLT export presets (YouTube etc.)
-        builder.Services.AddSingleton<UpdateService>();         // Velopack auto-update
         builder.Services.AddScoped<IXmlService, XmlService>();
         builder.Services.AddScoped<ShotcutService>();
         builder.Services.AddScoped<FileSearchService>();
