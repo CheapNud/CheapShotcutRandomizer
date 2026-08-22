@@ -45,6 +45,7 @@ _Nothing planned._
 
 ## Done
 
+- [x] (2026-08-22 → 2026-08-22) Grid per-cell sources: assign a source track to each grid cell (dropdown per cell), with a length-mismatch dialog offering trim-to-shortest or keep full length [user]
 - [x] (2026-08-20 → 2026-08-22) Hoist Velopack integration into CheapAvaloniaBlazor: lib 3.3.0 ships WithVelopackUpdates()/IUpdateService, local PoC UpdateService deleted; all NuGet packages updated, tests moved to xunit.v3 4.0 on Microsoft.Testing.Platform [user]
 - [x] (2026-08-20 → 2026-08-20) Velopack PoC: installer + LAN auto-update from forge releases (restart-to-apply button in nav), vpk owns release packaging; dropped .br/.gz publish twins [user]
 

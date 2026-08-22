@@ -8,6 +8,7 @@
 @inject ISnackbar Snackbar
 @inject CheapShotcutRandomizer.Services.RenderJobDraftService Draft
 @inject NavigationManager NavigationManager
+@inject MudBlazor.IDialogService DialogService
 @implements IDisposable
 
 <PageTitle>Randomizer - Cheap Shotcut Randomizer</PageTitle>
@@ -147,21 +148,45 @@
                 </MudSelect>
                 @if (_gridLayout > 1)
                 {
-                    <MudSelect @bind-Value="_gridSplit"
+                    <MudSelect @bind-Value="_cellMode"
                                Label="Cell Content"
                                Variant="Variant.Outlined"
-                               T="bool"
+                               T="CellContentMode"
                                Margin="Margin.Dense"
                                Style="max-width: 320px;">
-                        <MudSelectItem Value="false" T="bool">Independent random per cell</MudSelectItem>
-                        <MudSelectItem Value="true" T="bool">One compilation split across cells</MudSelectItem>
+                        <MudSelectItem Value="CellContentMode.IndependentRandom" T="CellContentMode">Independent random per cell</MudSelectItem>
+                        <MudSelectItem Value="CellContentMode.SplitCompilation" T="CellContentMode">One compilation split across cells</MudSelectItem>
+                        <MudSelectItem Value="CellContentMode.AssignedSources" T="CellContentMode">Assign a source track per cell</MudSelectItem>
                     </MudSelect>
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        @(_gridSplit
-                            ? $"One compilation carved into {_gridLayout} consecutive segments playing simultaneously — total runtime ≈ 1/{_gridLayout} of the compilation."
-                            : $"Generates {_gridLayout} independent random tracks shown simultaneously.")
+                        @(_cellMode switch
+                        {
+                            CellContentMode.SplitCompilation => $"One compilation carved into {_gridLayout} consecutive segments playing simultaneously — total runtime ≈ 1/{_gridLayout} of the compilation.",
+                            CellContentMode.AssignedSources => "Each cell plays a random compilation built only from the track assigned to it.",
+                            _ => $"Generates {_gridLayout} independent random tracks shown simultaneously."
+                        })
                         Audio from all cells is mixed together.
                     </MudText>
+                    @if (_cellMode == CellContentMode.AssignedSources && _selectedPlaylists.Count > 0)
+                    {
+                        @for (int cell = 0; cell < _gridLayout; cell++)
+                        {
+                            var cellIndex = cell;
+                            <MudSelect T="int"
+                                       Value="@GetCellAssignment(cellIndex)"
+                                       ValueChanged="@(sourceIndex => _cellAssignments[cellIndex] = sourceIndex)"
+                                       Label="@($"{CellLabel(cellIndex)} cell")"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Class="ml-8"
+                                       Style="max-width: 288px;">
+                                @foreach (var playlistIndex in _selectedPlaylists.OrderBy(x => x))
+                                {
+                                    <MudSelectItem Value="@playlistIndex" T="int">@ProjectState.CurrentProject.Playlist[playlistIndex].Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
+                    }
                 }
             </MudStack>
 
@@ -234,13 +259,40 @@
 }
 
 @code {
+    private enum CellContentMode { IndependentRandom, SplitCompilation, AssignedSources }
+
+    // A mismatch under this many seconds is normal random-packing jitter; above it
+    // the shorter cells visibly hold black, so the user gets the trim dialog
+    private const int GridDurationWarningToleranceSeconds = 10;
+
     private double _durationWeight = 4.0;
     private double _numberOfVideosWeight = 0.8;
     private int _gridLayout = 1;
-    private bool _gridSplit = false;
+    private CellContentMode _cellMode = CellContentMode.IndependentRandom;
+    private readonly Dictionary<int, int> _cellAssignments = [];
     private bool _avoidConsecutiveSameSource = true;
     private HashSet<int> _selectedPlaylists = [];
     private Dictionary<int, int> _targetSeconds = new();
+
+    private string CellLabel(int cell)
+    {
+        var name = ShotcutService.CellNames(_gridLayout)[cell];
+        return char.ToUpperInvariant(name[0]) + name[1..];
+    }
+
+    /// <summary>Assigned source for a cell; falls back to round-robin over the selection.</summary>
+    private int GetCellAssignment(int cell)
+    {
+        var ordered = _selectedPlaylists.OrderBy(x => x).ToList();
+        if (ordered.Count == 0)
+        {
+            return 0;
+        }
+
+        return _cellAssignments.TryGetValue(cell, out var sourceIndex) && _selectedPlaylists.Contains(sourceIndex)
+            ? sourceIndex
+            : ordered[cell % ordered.Count];
+    }
 
     private void TogglePlaylistSelection(int playlistIndex, bool selected)
     {
@@ -537,18 +589,33 @@
 
             if (_gridLayout > 1)
             {
-                // Split-screen: N independent random tracks, each SPR-filtered into a grid cell
-                var trackIndices = ShotcutSvc.GenerateGridCompilation(
+                // Split-screen: N random tracks, each SPR-filtered into a grid cell
+                List<int>? cellSources = _cellMode == CellContentMode.AssignedSources
+                    ? [.. Enumerable.Range(0, _gridLayout).Select(GetCellAssignment)]
+                    : null;
+
+                var gridResult = ShotcutSvc.GenerateGridCompilation(
                     projectCopy,
                     sourcePlaylists,
                     _durationWeight,
                     _numberOfVideosWeight,
                     _gridLayout,
-                    _gridSplit
+                    _cellMode == CellContentMode.SplitCompilation,
+                    cellSources
                 );
 
-                preSelectedTracks = string.Join(",", trackIndices);
-                baseName = _gridSplit ? $"grid{_gridLayout}_split" : $"grid{_gridLayout}_random";
+                if (!await ConfirmCellDurationsAsync(projectCopy, gridResult))
+                {
+                    return;
+                }
+
+                preSelectedTracks = string.Join(",", gridResult.TrackIndices);
+                baseName = _cellMode switch
+                {
+                    CellContentMode.SplitCompilation => $"grid{_gridLayout}_split",
+                    CellContentMode.AssignedSources => $"grid{_gridLayout}_assigned",
+                    _ => $"grid{_gridLayout}_random"
+                };
             }
             else
             {
@@ -580,6 +647,44 @@
         {
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
+    }
+
+    /// <summary>
+    /// When grid cells differ noticeably in length, warn and offer to trim the render
+    /// to the shortest cell so all cells end together. Returns false when the user
+    /// cancels the whole operation.
+    /// </summary>
+    private async Task<bool> ConfirmCellDurationsAsync(Mlt project, GridCompilationResult gridResult)
+    {
+        var durations = gridResult.CellPlaylists.Select(p => p.Entry.Sum(e => e.Duration)).ToList();
+        if (durations.Count < 2 || durations.Max() - durations.Min() <= GridDurationWarningToleranceSeconds)
+        {
+            return true;
+        }
+
+        var breakdown = string.Join("<br/>", gridResult.CellPlaylists.Select((p, i) =>
+            $"<strong>{p.Name}</strong>: {TimeSpan.FromSeconds(durations[i]):hh\\:mm\\:ss}"));
+
+        var choice = await DialogService.ShowMessageBoxAsync(
+            "Grid cells differ in length",
+            (MarkupString)($"{breakdown}<br/><br/>Shorter cells hold black once their content ends. " +
+                "Trim the render to the shortest cell so all cells end together?"),
+            yesText: "Trim to shortest",
+            noText: "Keep full length",
+            cancelText: "Cancel");
+
+        if (choice is null)
+        {
+            return false;
+        }
+
+        if (choice == true)
+        {
+            var shortestPlaylist = gridResult.CellPlaylists[durations.IndexOf(durations.Min())];
+            ShotcutSvc.SetRenderRangeToPlaylistDuration(project, shortestPlaylist);
+        }
+
+        return true;
     }
 
     protected override void OnInitialized()
