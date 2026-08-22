@@ -22,6 +22,19 @@
             </MudText>
         </MudItem>
 
+        @* What was selected for this job: encoder, output profile, tracks, range, post action *@
+        @if (GetSelectionSummary() is { Count: > 0 } summaryParts)
+        {
+            <MudItem xs="12">
+                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                    @foreach (var part in summaryParts)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default">@part</MudChip>
+                    }
+                </MudStack>
+            </MudItem>
+        }
+
         @* File size information *@
         @if (Job.Status == RenderJobStatus.Completed && Job.OutputFileSizeBytes.HasValue)
         {
@@ -57,6 +70,12 @@
                         <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Storage" Variant="Variant.Text" Color="Color.Info">
                             Current file size: @_currentFileSize
                         </MudChip>
+                        @if (!string.IsNullOrEmpty(_estimatedFinalSize))
+                        {
+                            <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Straighten" Variant="Variant.Text">
+                                Estimated final: @_estimatedFinalSize
+                            </MudChip>
+                        }
                     </MudStack>
                 </MudItem>
             }
@@ -183,6 +202,120 @@
 
     private bool _showError = false;
     private string _currentFileSize = string.Empty;
+    private string _estimatedFinalSize = string.Empty;
+
+    // Settings are persisted as JSON (MeltSettings itself is not DB-mapped);
+    // parse once per job and cache keyed on the serialized string
+    private MeltRenderSettings? _parsedSettings;
+    private string? _parsedSettingsSource;
+
+    private MeltRenderSettings? GetSettings()
+    {
+        if (Job.MeltSettings != null)
+        {
+            return Job.MeltSettings;
+        }
+
+        if (string.IsNullOrEmpty(Job.RenderSettings))
+        {
+            return null;
+        }
+
+        if (_parsedSettingsSource != Job.RenderSettings)
+        {
+            try
+            {
+                _parsedSettings = System.Text.Json.JsonSerializer.Deserialize<MeltRenderSettings>(Job.RenderSettings);
+            }
+            catch
+            {
+                _parsedSettings = null;
+            }
+            _parsedSettingsSource = Job.RenderSettings;
+        }
+
+        return _parsedSettings;
+    }
+
+    // Each encoder family takes quality through a different flag; label accordingly
+    private static string QualityLabel(string videoCodec) => videoCodec switch
+    {
+        var codec when codec.Contains("nvenc") => "CQ",
+        var codec when codec.Contains("qsv") => "Q",
+        var codec when codec.Contains("amf") => "QP",
+        _ => "CRF"
+    };
+
+    private List<string> GetSelectionSummary()
+    {
+        var parts = new List<string>();
+        var settings = GetSettings();
+
+        if (settings != null)
+        {
+            if (settings.PresetProperties is { Count: > 0 })
+            {
+                parts.Add($"Preset: {settings.PresetName ?? "Shotcut export preset"}");
+            }
+            else
+            {
+                // Hand-edited or legacy settings JSON could null these out
+                var videoCodec = settings.VideoCodec ?? "unknown codec";
+                var audioCodec = settings.AudioCodec ?? "unknown codec";
+
+                var videoSummary = videoCodec;
+                if (settings.Crf.HasValue)
+                {
+                    videoSummary += $" · {QualityLabel(videoCodec)} {settings.Crf.Value}";
+                }
+                if (videoCodec.StartsWith("libx") && !string.IsNullOrEmpty(settings.Preset))
+                {
+                    videoSummary += $" · {settings.Preset}";
+                }
+                parts.Add(videoSummary);
+
+                parts.Add(settings.AudioQuality.HasValue
+                    ? $"{audioCodec} · VBR q{settings.AudioQuality.Value:0.#}"
+                    : $"{audioCodec} · {settings.AudioBitrate}");
+            }
+
+            if (settings.Width.HasValue && settings.Height.HasValue)
+            {
+                parts.Add($"{settings.Width}×{settings.Height}");
+            }
+
+            if (settings is { FrameRateNum: not null, FrameRateDen: not null and not 0 })
+            {
+                parts.Add($"{(double)settings.FrameRateNum.Value / settings.FrameRateDen.Value:0.##} fps");
+            }
+        }
+
+        var trackSummary = (Job.SelectedVideoTracks, Job.SelectedAudioTracks) switch
+        {
+            (null or "", null or "") => null,
+            (var video, null or "") => $"Video tracks {video}",
+            (null or "", var audio) => $"Audio tracks {audio}",
+            var (video, audio) => $"Video tracks {video} · Audio {audio}"
+        };
+        if (trackSummary != null)
+        {
+            parts.Add(trackSummary);
+        }
+
+        if (Job.InPoint.HasValue || Job.OutPoint.HasValue)
+        {
+            var rangeStart = Job.InPoint.HasValue ? Job.FramesToTimecode(Job.InPoint.Value) : "start";
+            var rangeEnd = Job.OutPoint.HasValue ? Job.FramesToTimecode(Job.OutPoint.Value) : "end";
+            parts.Add($"Range {rangeStart} – {rangeEnd}");
+        }
+
+        if (Job.PostAction == "move" && !string.IsNullOrEmpty(Job.PostActionTarget))
+        {
+            parts.Add($"Then move to {Job.PostActionTarget}");
+        }
+
+        return parts;
+    }
     private System.Timers.Timer? _fileSizeTimer;
     private DateTime _lastFileSizeUpdate = DateTime.MinValue;
     private bool _disposed;
@@ -385,6 +518,7 @@
             _fileSizeTimer = null;
         }
         _currentFileSize = string.Empty;
+        _estimatedFinalSize = string.Empty;
     }
 
     private async void OnFileSizeTimerElapsed(object? sender, ElapsedEventArgs e)
@@ -412,6 +546,14 @@
                 {
                     var fileInfo = new FileInfo(outputPath);
                     _currentFileSize = FormatBytes(fileInfo.Length);
+
+                    // Extrapolate the final size from bytes-so-far vs render progress.
+                    // Below a few percent the ratio swings wildly, so hold off until then.
+                    var progress = Math.Min(Job.ProgressPercentage, 100);
+                    _estimatedFinalSize = progress >= 3
+                        ? $"≈ {FormatBytes((long)(fileInfo.Length / (progress / 100.0)))}"
+                        : string.Empty;
+
                     StateHasChanged();
                 }
             }
