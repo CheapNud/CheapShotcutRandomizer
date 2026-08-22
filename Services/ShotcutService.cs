@@ -4,6 +4,12 @@ using CheapHelpers.Services.DataExchange.Xml;
 namespace CheapShotcutRandomizer.Services;
 
 /// <summary>
+/// Result of a grid compilation: tractor track indices and the generated cell
+/// playlists, in cell order (skipped unfillable cells are absent from both).
+/// </summary>
+public record GridCompilationResult(List<int> TrackIndices, List<Playlist> CellPlaylists);
+
+/// <summary>
 /// Represents information about a track in an MLT project
 /// </summary>
 public class TrackInfo
@@ -290,31 +296,48 @@ public class ShotcutService(IXmlService xmlService)
     /// in its own cell of a side-by-side (2) or 2x2 (4) grid. Uses the same mechanics
     /// Shotcut's UI produces: a Size Position Rotate filter (MLT affine) per track and
     /// the mix + qtblend transitions Shotcut plants for every video track.
-    /// Returns the tractor track indices of the generated cells.
+    /// Returns the tractor track indices and playlists of the generated cells.
     /// </summary>
-    public List<int> GenerateGridCompilation(
+    public GridCompilationResult GenerateGridCompilation(
         Mlt project,
         List<(int PlaylistIndex, int TargetDurationSeconds)> sourcePlaylists,
         double durationWeight,
         double numberOfVideosWeight,
         int cells,
-        bool splitSingleCompilation = false)
+        bool splitSingleCompilation = false,
+        List<int>? cellSources = null)
     {
         if (cells is not (2 or 4))
             throw new ArgumentException("Grid layout supports 2 or 4 cells", nameof(cells));
+        if (splitSingleCompilation && cellSources is not null)
+            throw new ArgumentException("Split mode and per-cell sources are mutually exclusive", nameof(cellSources));
+        if (cellSources is not null && cellSources.Count != cells)
+            throw new ArgumentException("cellSources must assign one source playlist per cell", nameof(cellSources));
 
         var profileWidth = int.TryParse(project.Profile?.Width, out var parsedWidth) ? parsedWidth : 1920;
         var profileHeight = int.TryParse(project.Profile?.Height, out var parsedHeight) ? parsedHeight : 1080;
         var cellRects = BuildCellRects(profileWidth, profileHeight, cells);
 
-        // Independent mode: every cell is its own random compilation.
+        // Independent mode: every cell is its own random compilation over all sources.
         // Split mode: ONE compilation carved into consecutive, duration-balanced
         // segments that play simultaneously (a 40 min sequence becomes ~10 min of 4-up).
+        // Assigned mode: each cell compiles from exactly one assigned source playlist.
         List<List<Entry>> cellEntries;
         if (splitSingleCompilation)
         {
             var compilation = SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight);
             cellEntries = SplitEvenlyByDuration(compilation, cells);
+        }
+        else if (cellSources is not null)
+        {
+            cellEntries = [.. cellSources.Select(sourceIndex =>
+            {
+                var targetSeconds = sourcePlaylists
+                    .Where(p => p.PlaylistIndex == sourceIndex)
+                    .Select(p => p.TargetDurationSeconds)
+                    .FirstOrDefault();
+                return SelectRandomEntries(project, [(sourceIndex, targetSeconds)], durationWeight, numberOfVideosWeight);
+            })];
         }
         else
         {
@@ -323,8 +346,10 @@ public class ShotcutService(IXmlService xmlService)
         }
 
         var trackIndices = new List<int>();
+        var cellPlaylists = new List<Playlist>();
         Playlist? longestPlaylist = null;
         var longestDuration = -1;
+        var cellNames = CellNames(cells);
 
         for (int cell = 0; cell < cells; cell++)
         {
@@ -335,7 +360,7 @@ public class ShotcutService(IXmlService xmlService)
                 continue;
             }
 
-            var (playlist, trackIndex) = AddGeneratedTrack(project, cellEntries[cell], $"grid {cell + 1}");
+            var (playlist, trackIndex) = AddGeneratedTrack(project, cellEntries[cell], $"grid {cellNames[cell]}");
 
             // Size Position Rotate filter placing this track in its grid cell.
             // shotcut:filter marks it so Shotcut's UI shows it as an editable SPR filter.
@@ -357,6 +382,7 @@ public class ShotcutService(IXmlService xmlService)
 
             EnsureTrackTransitions(project, trackIndex);
             trackIndices.Add(trackIndex);
+            cellPlaylists.Add(playlist);
 
             var duration = playlist.Entry.Sum(e => e.Duration);
             if (duration > longestDuration)
@@ -372,8 +398,13 @@ public class ShotcutService(IXmlService xmlService)
             SetRenderRangeToPlaylistDuration(project, longestPlaylist);
         }
 
-        return trackIndices;
+        return new GridCompilationResult(trackIndices, cellPlaylists);
     }
+
+    /// <summary>Position names per cell, in the same order as BuildCellRects.</summary>
+    public static string[] CellNames(int cells) => cells == 2
+        ? ["left", "right"]
+        : ["top left", "top right", "bottom left", "bottom right"];
 
     /// <summary>
     /// Split an entry sequence into N consecutive chunks balanced by duration

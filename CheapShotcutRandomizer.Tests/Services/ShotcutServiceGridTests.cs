@@ -63,7 +63,7 @@ public class ShotcutServiceGridTests
             durationWeight: 0,
             numberOfVideosWeight: 1,
             cells: 4,
-            splitSingleCompilation: true);
+            splitSingleCompilation: true).TrackIndices;
 
         trackIndices.Should().HaveCount(4);
 
@@ -106,7 +106,7 @@ public class ShotcutServiceGridTests
         var shotcutService = new ShotcutService(new Mock<IXmlService>().Object);
 
         var trackIndices = shotcutService.GenerateGridCompilation(
-            project, [(1, 0)], 0, 1, cells: 4, splitSingleCompilation: true);
+            project, [(1, 0)], 0, 1, cells: 4, splitSingleCompilation: true).TrackIndices;
 
         trackIndices.Should().HaveCountLessThanOrEqualTo(3);
         project.Playlist.Skip(2).Should().OnlyContain(p => p.Entry.Count > 0,
@@ -125,7 +125,7 @@ public class ShotcutServiceGridTests
             durationWeight: 0,
             numberOfVideosWeight: 1,
             cells: 2,
-            splitSingleCompilation: false);
+            splitSingleCompilation: false).TrackIndices;
 
         trackIndices.Should().HaveCount(2);
 
@@ -141,5 +141,56 @@ public class ShotcutServiceGridTests
                 t.Property.Any(pr => pr.Name == "mlt_service" && pr.Text == "qtblend") &&
                 t.Property.Any(pr => pr.Name == "b_track" && pr.Text == trackIndex.ToString()));
         }
+    }
+
+    [Fact]
+    public void AssignedMode_Each_Cell_Draws_Only_From_Its_Source()
+    {
+        var project = BuildProject(sourceEntries: 4, entrySeconds: 10);
+
+        // Second source playlist with distinct producers
+        project.Playlist.Add(new Playlist
+        {
+            Id = "playlist2",
+            Entry = [.. Enumerable.Range(0, 4).Select(i => new Entry
+            {
+                Producer = $"other{i}",
+                In = "00:00:00.000",
+                Out = "00:00:10.000"
+            })],
+            Property = [new() { Name = "shotcut:name", Text = "second" }]
+        });
+        project.Tractor[0].Track.Add(new Track { Producer = "playlist2" });
+
+        var shotcutService = new ShotcutService(new Mock<IXmlService>().Object);
+
+        var gridResult = shotcutService.GenerateGridCompilation(
+            project,
+            [(1, 0), (2, 0)],
+            durationWeight: 0,
+            numberOfVideosWeight: 1,
+            cells: 2,
+            cellSources: [1, 2]);
+
+        gridResult.CellPlaylists.Should().HaveCount(2);
+        gridResult.CellPlaylists[0].Entry.Should().OnlyContain(e => e.Producer.StartsWith("clip"),
+            "left cell was assigned the first source");
+        gridResult.CellPlaylists[1].Entry.Should().OnlyContain(e => e.Producer.StartsWith("other"),
+            "right cell was assigned the second source");
+    }
+
+    [Fact]
+    public void AssignedMode_Rejects_Wrong_Assignment_Count_And_Split_Combination()
+    {
+        var project = BuildProject(sourceEntries: 4, entrySeconds: 10);
+        var shotcutService = new ShotcutService(new Mock<IXmlService>().Object);
+
+        var wrongCount = () => shotcutService.GenerateGridCompilation(
+            project, [(1, 0)], 0, 1, cells: 4, cellSources: [1, 1]);
+        wrongCount.Should().Throw<ArgumentException>();
+
+        var withSplit = () => shotcutService.GenerateGridCompilation(
+            project, [(1, 0)], 0, 1, cells: 2, splitSingleCompilation: true, cellSources: [1, 1]);
+        withSplit.Should().Throw<ArgumentException>();
     }
 }
