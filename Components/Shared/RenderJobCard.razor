@@ -259,20 +259,24 @@
             }
             else
             {
-                var videoSummary = $"{settings.VideoCodec}";
+                // Hand-edited or legacy settings JSON could null these out
+                var videoCodec = settings.VideoCodec ?? "unknown codec";
+                var audioCodec = settings.AudioCodec ?? "unknown codec";
+
+                var videoSummary = videoCodec;
                 if (settings.Crf.HasValue)
                 {
-                    videoSummary += $" · {QualityLabel(settings.VideoCodec)} {settings.Crf.Value}";
+                    videoSummary += $" · {QualityLabel(videoCodec)} {settings.Crf.Value}";
                 }
-                if (settings.VideoCodec.StartsWith("libx") && !string.IsNullOrEmpty(settings.Preset))
+                if (videoCodec.StartsWith("libx") && !string.IsNullOrEmpty(settings.Preset))
                 {
                     videoSummary += $" · {settings.Preset}";
                 }
                 parts.Add(videoSummary);
 
                 parts.Add(settings.AudioQuality.HasValue
-                    ? $"{settings.AudioCodec} · VBR q{settings.AudioQuality.Value:0.#}"
-                    : $"{settings.AudioCodec} · {settings.AudioBitrate}");
+                    ? $"{audioCodec} · VBR q{settings.AudioQuality.Value:0.#}"
+                    : $"{audioCodec} · {settings.AudioBitrate}");
             }
 
             if (settings.Width.HasValue && settings.Height.HasValue)
@@ -545,7 +549,7 @@
 
                     // Extrapolate the final size from bytes-so-far vs render progress.
                     // Below a few percent the ratio swings wildly, so hold off until then.
-                    var progress = Job.ProgressPercentage;
+                    var progress = Math.Min(Job.ProgressPercentage, 100);
                     _estimatedFinalSize = progress >= 3
                         ? $"≈ {FormatBytes((long)(fileInfo.Length / (progress / 100.0)))}"
                         : string.Empty;
