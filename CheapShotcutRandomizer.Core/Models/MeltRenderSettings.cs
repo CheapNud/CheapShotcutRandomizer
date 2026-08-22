@@ -93,4 +93,9 @@ public class MeltRenderSettings
     /// above are not emitted. Resolution/frame-rate overrides still apply.
     /// </summary>
     public Dictionary<string, string>? PresetProperties { get; set; }
+
+    /// <summary>
+    /// Display name of the stock export preset behind PresetProperties (queue UI only)
+    /// </summary>
+    public string? PresetName { get; set; }
 }
