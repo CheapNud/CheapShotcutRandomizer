@@ -24,4 +24,6 @@ jobs:
         run: dotnet build CheapShotcutRandomizer.slnx --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test CheapShotcutRandomizer.slnx --no-build --configuration Release --verbosity normal
+        # xunit.v3 4.x is a Microsoft.Testing.Platform executable; dotnet test's
+        # VSTest mode can no longer drive it, so run the test exe directly
+        run: dotnet run --project CheapShotcutRandomizer.Tests/CheapShotcutRandomizer.Tests.csproj --no-build --configuration Release

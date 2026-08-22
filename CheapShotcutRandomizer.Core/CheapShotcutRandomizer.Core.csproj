@@ -12,8 +12,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CheapHelpers" Version="3.7.0" />
-    <PackageReference Include="CheapHelpers.MediaProcessing" Version="3.7.0" />
+    <PackageReference Include="CheapHelpers" Version="3.8.0" />
+    <PackageReference Include="CheapHelpers.MediaProcessing" Version="3.8.0" />
   </ItemGroup>
 
 </Project>
