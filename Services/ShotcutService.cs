@@ -300,6 +300,28 @@ public class ShotcutService(IXmlService xmlService)
     }
 
     /// <summary>
+    /// Collapse entries that show the same footage: identical resource file AND
+    /// identical in/out range. Different segments of the same file survive.
+    /// Producers without a resolvable chain resource compare by producer id.
+    /// </summary>
+    public static List<Entry> DedupeEntries(Mlt project, IEnumerable<Entry> entries)
+    {
+        var resourceByProducer = new Dictionary<string, string>();
+        foreach (var chain in project.Chain)
+        {
+            resourceByProducer.TryAdd(chain.Id,
+                chain.Property.FirstOrDefault(p => p.Name == "resource")?.Text ?? chain.Id);
+        }
+
+        return [.. entries.DistinctBy(e =>
+        (
+            resourceByProducer.GetValueOrDefault(e.Producer, e.Producer).ToUpperInvariant(),
+            e.In,
+            e.Out
+        ))];
+    }
+
+    /// <summary>
     /// Run the simulated-annealing selection over the chosen source playlists and
     /// return the shuffled entry sequence for one compilation.
     /// </summary>
@@ -323,16 +345,20 @@ public class ShotcutService(IXmlService xmlService)
 
             totalTargetDuration += actualTarget;
 
+            var playlistPool = DedupeEntries(project, project.Playlist[playlistIndex].Entry);
+
             var selectedVideos = new SimulatedAnnealingVideoSelector(actualTarget, durationWeight, numberOfVideosWeight)
-                .SelectVideos([.. project.Playlist[playlistIndex].Entry.Shuffle()])
+                .SelectVideos([.. playlistPool.Shuffle()])
                 .Shuffle()
                 .ToList();
 
             allVideos.AddRange(selectedVideos);
         }
 
+        var combinedPool = DedupeEntries(project, allVideos);
+
         return new SimulatedAnnealingVideoSelector(totalTargetDuration, durationWeight, numberOfVideosWeight)
-            .SelectVideos(allVideos)
+            .SelectVideos(combinedPool)
             .Shuffle()
             .ToList();
     }
