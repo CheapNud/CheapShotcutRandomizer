@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapShotcutRandomizer project work tracker
-  Last updated: 2026-08-20
+  Last updated: 2026-08-23
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -45,6 +45,7 @@ _Nothing planned._
 
 ## Done
 
+- [x] (2026-08-23 → 2026-08-23) Multi-project sources, clip dedupe, swing mode: extra .mlt files merge in as source pools, selection dedupes by resource + in/out range, swing bias anchors long clips with shorts spread evenly between them [user]
 - [x] (2026-08-22 → 2026-08-22) Queue card job summary: encoder/quality, preset name, resolution/fps, audio, tracks, range, post action chips; estimated final file size extrapolated from progress while rendering [user]
 - [x] (2026-08-22 → 2026-08-22) Grid per-cell sources: assign a source track to each grid cell (dropdown per cell), with a length-mismatch dialog offering trim-to-shortest or keep full length [user]
 - [x] (2026-08-20 → 2026-08-22) Hoist Velopack integration into CheapAvaloniaBlazor: lib 3.3.0 ships WithVelopackUpdates()/IUpdateService, local PoC UpdateService deleted; all NuGet packages updated, tests moved to xunit.v3 4.0 on Microsoft.Testing.Platform [user]
