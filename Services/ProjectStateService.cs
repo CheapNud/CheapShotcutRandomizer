@@ -37,6 +37,12 @@ public class ProjectStateService
     }
 
     /// <summary>
+    /// Additional .mlt files whose playlists are merged into CurrentProject as
+    /// source pools. Order matters: merge labels (src1, src2, ...) follow it.
+    /// </summary>
+    public List<string> ExtraProjectPaths { get; } = [];
+
+    /// <summary>
     /// Event raised when the project is loaded or changed
     /// </summary>
     public event Action? OnProjectChanged;
@@ -53,6 +59,7 @@ public class ProjectStateService
     {
         _currentProject = null;
         _currentProjectPath = string.Empty;
+        ExtraProjectPaths.Clear();
         OnProjectChanged?.Invoke();
     }
 }

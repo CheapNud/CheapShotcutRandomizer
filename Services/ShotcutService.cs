@@ -64,6 +64,96 @@ public class ShotcutService(IXmlService xmlService)
     }
 
     /// <summary>
+    /// Load the primary project and merge every extra project into it as additional
+    /// source pools. All resource paths end up absolute so selections can be compared
+    /// and rendered regardless of which project directory they came from.
+    /// Returns null when any project fails to load (a partial merge would silently
+    /// shift playlist indices the UI depends on).
+    /// </summary>
+    public async Task<Mlt?> LoadCombinedProjectAsync(string primaryPath, IReadOnlyList<string> extraPaths)
+    {
+        var primary = await LoadProjectAsync(primaryPath);
+        if (primary == null)
+            return null;
+
+        MakeResourcePathsAbsolute(primary, Path.GetDirectoryName(primaryPath) ?? string.Empty);
+
+        for (int i = 0; i < extraPaths.Count; i++)
+        {
+            var extra = await LoadProjectAsync(extraPaths[i]);
+            if (extra == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to load extra source project: {extraPaths[i]}");
+                return null;
+            }
+
+            MergeSourceProject(primary, extra, extraPaths[i], $"src{i + 1}");
+        }
+
+        return primary;
+    }
+
+    /// <summary>
+    /// Import another project's timeline playlists into the primary as source pools:
+    /// chains are copied with prefixed ids, resources made absolute against the extra
+    /// project's directory, and no tractor tracks are added (the pools feed the
+    /// randomizer, they are not part of the primary timeline).
+    /// </summary>
+    public void MergeSourceProject(Mlt primary, Mlt extra, string extraProjectPath, string label)
+    {
+        var extraDir = Path.GetDirectoryName(extraProjectPath) ?? string.Empty;
+        var fileStem = Path.GetFileNameWithoutExtension(extraProjectPath);
+
+        MakeResourcePathsAbsolute(extra, extraDir);
+
+        var idMap = new Dictionary<string, string>();
+        foreach (var chain in extra.Chain)
+        {
+            var newId = $"{label}_{chain.Id}";
+            idMap[chain.Id] = newId;
+            chain.Id = newId;
+            primary.Chain.Add(chain);
+        }
+
+        // Only playlists the extra project's own UI would show as tracks; bin and
+        // system playlists never become source pools
+        var timelinePlaylistIds = GetTracks(extra).Select(t => t.ProducerId).ToHashSet();
+
+        foreach (var playlist in extra.Playlist.Where(p => timelinePlaylistIds.Contains(p.Id) && p.Entry.Count > 0))
+        {
+            playlist.Id = $"{label}_{playlist.Id}";
+
+            foreach (var entry in playlist.Entry)
+            {
+                if (idMap.TryGetValue(entry.Producer, out var newProducerId))
+                {
+                    entry.Producer = newProducerId;
+                }
+            }
+
+            var nameProperty = playlist.Property.FirstOrDefault(p => p.Name == "shotcut:name");
+            if (nameProperty != null)
+            {
+                nameProperty.Text = $"{nameProperty.Text} ({fileStem})";
+            }
+            else
+            {
+                playlist.Property.Add(new() { Name = "shotcut:name", Text = fileStem });
+            }
+
+            primary.Playlist.Add(playlist);
+        }
+    }
+
+    /// <summary>
+    /// True for playlists imported from an extra project (id prefixed by
+    /// MergeSourceProject's srcN label). They have no tractor track, so
+    /// track-based actions (shuffle-and-render) do not apply to them.
+    /// </summary>
+    public static bool IsMergedSourcePlaylist(Playlist playlist) =>
+        System.Text.RegularExpressions.Regex.IsMatch(playlist.Id, @"^src\d+_");
+
+    /// <summary>
     /// Where generated shuffle/random projects live before rendering - our own temp
     /// subfolder, so they can be deleted safely once their job reaches a terminal state.
     /// </summary>
