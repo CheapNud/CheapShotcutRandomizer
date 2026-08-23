@@ -329,7 +329,8 @@ public class ShotcutService(IXmlService xmlService)
         Mlt project,
         List<(int PlaylistIndex, int TargetDurationSeconds)> sourcePlaylists,
         double durationWeight,
-        double numberOfVideosWeight)
+        double numberOfVideosWeight,
+        bool swingBias = false)
     {
         var allVideos = new List<Entry>();
         int totalTargetDuration = 0;
@@ -347,20 +348,26 @@ public class ShotcutService(IXmlService xmlService)
 
             var playlistPool = DedupeEntries(project, project.Playlist[playlistIndex].Entry);
 
-            var selectedVideos = new SimulatedAnnealingVideoSelector(actualTarget, durationWeight, numberOfVideosWeight)
-                .SelectVideos([.. playlistPool.Shuffle()])
-                .Shuffle()
-                .ToList();
+            var selectedVideos = swingBias
+                ? SwingVideoSelector.Select(playlistPool, actualTarget)
+                : new SimulatedAnnealingVideoSelector(actualTarget, durationWeight, numberOfVideosWeight)
+                    .SelectVideos([.. playlistPool.Shuffle()])
+                    .Shuffle()
+                    .ToList();
 
             allVideos.AddRange(selectedVideos);
         }
 
         var combinedPool = DedupeEntries(project, allVideos);
 
-        return new SimulatedAnnealingVideoSelector(totalTargetDuration, durationWeight, numberOfVideosWeight)
-            .SelectVideos(combinedPool)
-            .Shuffle()
-            .ToList();
+        // Swing arranges its own order (longs anchoring, shorts dealt into the
+        // gaps) - shuffling it would erase the pattern
+        return swingBias
+            ? SwingVideoSelector.Select(combinedPool, totalTargetDuration)
+            : new SimulatedAnnealingVideoSelector(totalTargetDuration, durationWeight, numberOfVideosWeight)
+                .SelectVideos(combinedPool)
+                .Shuffle()
+                .ToList();
     }
 
     /// <summary>
@@ -396,9 +403,10 @@ public class ShotcutService(IXmlService xmlService)
         Mlt project,
         List<(int PlaylistIndex, int TargetDurationSeconds)> sourcePlaylists,
         double durationWeight,
-        double numberOfVideosWeight)
+        double numberOfVideosWeight,
+        bool swingBias = false)
     {
-        var finalVideos = SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight);
+        var finalVideos = SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight, swingBias);
         var (newPlaylist, newTrackIndex) = AddGeneratedTrack(project, finalVideos, "generated");
 
         // Set render range to match the generated playlist duration
@@ -421,7 +429,8 @@ public class ShotcutService(IXmlService xmlService)
         double numberOfVideosWeight,
         int cells,
         bool splitSingleCompilation = false,
-        List<int>? cellSources = null)
+        List<int>? cellSources = null,
+        bool swingBias = false)
     {
         if (cells is not (2 or 4))
             throw new ArgumentException("Grid layout supports 2 or 4 cells", nameof(cells));
@@ -441,7 +450,7 @@ public class ShotcutService(IXmlService xmlService)
         List<List<Entry>> cellEntries;
         if (splitSingleCompilation)
         {
-            var compilation = SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight);
+            var compilation = SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight, swingBias);
             cellEntries = SplitEvenlyByDuration(compilation, cells);
         }
         else if (cellSources is not null)
@@ -452,13 +461,13 @@ public class ShotcutService(IXmlService xmlService)
                     .Where(p => p.PlaylistIndex == sourceIndex)
                     .Select(p => p.TargetDurationSeconds)
                     .FirstOrDefault();
-                return SelectRandomEntries(project, [(sourceIndex, targetSeconds)], durationWeight, numberOfVideosWeight);
+                return SelectRandomEntries(project, [(sourceIndex, targetSeconds)], durationWeight, numberOfVideosWeight, swingBias);
             })];
         }
         else
         {
             cellEntries = [.. Enumerable.Range(0, cells)
-                .Select(_ => SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight))];
+                .Select(_ => SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight, swingBias))];
         }
 
         var trackIndices = new List<int>();
