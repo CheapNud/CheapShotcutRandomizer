@@ -1123,11 +1123,14 @@
             .Select(t => t.Info.Index.ToString())
             .ToArray();
 
-        renderJob.SelectedVideoTracks = selectedVideoIndices.Length > 0
+        // Store a track list only when it narrows the selection: "all tracks" and
+        // null render identically (ApplyTrackSelection hides nothing either way),
+        // and the queue card would otherwise just echo the project's full track list
+        renderJob.SelectedVideoTracks = selectedVideoIndices.Length > 0 && selectedVideoIndices.Length < _videoTracks.Count
             ? string.Join(",", selectedVideoIndices)
             : null;
 
-        renderJob.SelectedAudioTracks = selectedAudioIndices.Length > 0
+        renderJob.SelectedAudioTracks = selectedAudioIndices.Length > 0 && selectedAudioIndices.Length < _audioTracks.Count
             ? string.Join(",", selectedAudioIndices)
             : null;
 
