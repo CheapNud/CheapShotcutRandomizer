@@ -431,11 +431,9 @@
 
             ProjectState.CurrentProjectPath = path;
             ProjectState.ExtraProjectPaths.Clear();
-            await ReloadCombinedProjectAsync();
-
-            if (ProjectState.CurrentProject == null)
+            if (!await ReloadCombinedProjectAsync())
             {
-                Snackbar.Add("Failed to load project", Severity.Error);
+                ProjectState.ClearProject();
                 return;
             }
 
@@ -451,7 +449,7 @@
     /// Reload the primary project with all extra sources merged in. Selections are
     /// cleared because playlist indices shift whenever the source set changes.
     /// </summary>
-    private async Task ReloadCombinedProjectAsync()
+    private async Task<bool> ReloadCombinedProjectAsync()
     {
         var combined = await ShotcutSvc.LoadCombinedProjectAsync(
             ProjectState.CurrentProjectPath, ProjectState.ExtraProjectPaths);
@@ -459,13 +457,14 @@
         if (combined == null)
         {
             Snackbar.Add("Failed to load one of the source projects", Severity.Error);
-            return;
+            return false;
         }
 
         _selectedPlaylists.Clear();
         _targetSeconds.Clear();
         _cellAssignments.Clear();
         ProjectState.CurrentProject = combined;
+        return true;
     }
 
     private async Task AddSourceProjectAsync()
@@ -487,13 +486,16 @@
         }
 
         ProjectState.ExtraProjectPaths.Add(path);
-        await ReloadCombinedProjectAsync();
+        if (!await ReloadCombinedProjectAsync())
+        {
+            ProjectState.ExtraProjectPaths.Remove(path);
+        }
     }
 
     private async Task RemoveSourceProjectAsync(string path)
     {
         ProjectState.ExtraProjectPaths.Remove(path);
-        await ReloadCombinedProjectAsync();
+        _ = await ReloadCombinedProjectAsync();
     }
 
     private async Task ShufflePlaylistAsync(int playlistIndex)
@@ -503,9 +505,18 @@
             if (ProjectState.CurrentProject == null)
                 return;
 
-            ShotcutSvc.ShufflePlaylist(ProjectState.CurrentProject, playlistIndex, _avoidConsecutiveSameSource);
+            // Shuffle a fresh plain copy - shuffling the shared merged project in place
+            // would save the merged source chains into the user's own project file
+            var projectCopy = await ShotcutSvc.LoadProjectAsync(ProjectState.CurrentProjectPath);
+            if (projectCopy == null)
+            {
+                Snackbar.Add("Failed to load project copy", Severity.Error);
+                return;
+            }
 
-            var newPath = await ShotcutSvc.SaveProjectAsync(ProjectState.CurrentProject, ProjectState.CurrentProjectPath);
+            ShotcutSvc.ShufflePlaylist(projectCopy, playlistIndex, _avoidConsecutiveSameSource);
+
+            var newPath = await ShotcutSvc.SaveProjectAsync(projectCopy, ProjectState.CurrentProjectPath);
 
             var constraintMsg = _avoidConsecutiveSameSource ? " (avoiding consecutive same source)" : "";
             Snackbar.Add($"Shuffled{constraintMsg} and saved to: {Path.GetFileName(newPath)}", Severity.Success);
