@@ -64,6 +64,96 @@ public class ShotcutService(IXmlService xmlService)
     }
 
     /// <summary>
+    /// Load the primary project and merge every extra project into it as additional
+    /// source pools. All resource paths end up absolute so selections can be compared
+    /// and rendered regardless of which project directory they came from.
+    /// Returns null when any project fails to load (a partial merge would silently
+    /// shift playlist indices the UI depends on).
+    /// </summary>
+    public async Task<Mlt?> LoadCombinedProjectAsync(string primaryPath, IReadOnlyList<string> extraPaths)
+    {
+        var primary = await LoadProjectAsync(primaryPath);
+        if (primary == null)
+            return null;
+
+        MakeResourcePathsAbsolute(primary, Path.GetDirectoryName(primaryPath) ?? string.Empty);
+
+        for (int i = 0; i < extraPaths.Count; i++)
+        {
+            var extra = await LoadProjectAsync(extraPaths[i]);
+            if (extra == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to load extra source project: {extraPaths[i]}");
+                return null;
+            }
+
+            MergeSourceProject(primary, extra, extraPaths[i], $"src{i + 1}");
+        }
+
+        return primary;
+    }
+
+    /// <summary>
+    /// Import another project's timeline playlists into the primary as source pools:
+    /// chains are copied with prefixed ids, resources made absolute against the extra
+    /// project's directory, and no tractor tracks are added (the pools feed the
+    /// randomizer, they are not part of the primary timeline).
+    /// </summary>
+    public void MergeSourceProject(Mlt primary, Mlt extra, string extraProjectPath, string label)
+    {
+        var extraDir = Path.GetDirectoryName(extraProjectPath) ?? string.Empty;
+        var fileStem = Path.GetFileNameWithoutExtension(extraProjectPath);
+
+        MakeResourcePathsAbsolute(extra, extraDir);
+
+        var idMap = new Dictionary<string, string>();
+        foreach (var chain in extra.Chain)
+        {
+            var newId = $"{label}_{chain.Id}";
+            idMap[chain.Id] = newId;
+            chain.Id = newId;
+            primary.Chain.Add(chain);
+        }
+
+        // Only playlists the extra project's own UI would show as tracks; bin and
+        // system playlists never become source pools
+        var timelinePlaylistIds = GetTracks(extra).Select(t => t.ProducerId).ToHashSet();
+
+        foreach (var playlist in extra.Playlist.Where(p => timelinePlaylistIds.Contains(p.Id) && p.Entry.Count > 0))
+        {
+            playlist.Id = $"{label}_{playlist.Id}";
+
+            foreach (var entry in playlist.Entry)
+            {
+                if (idMap.TryGetValue(entry.Producer, out var newProducerId))
+                {
+                    entry.Producer = newProducerId;
+                }
+            }
+
+            var nameProperty = playlist.Property.FirstOrDefault(p => p.Name == "shotcut:name");
+            if (nameProperty != null)
+            {
+                nameProperty.Text = $"{nameProperty.Text} ({fileStem})";
+            }
+            else
+            {
+                playlist.Property.Add(new() { Name = "shotcut:name", Text = fileStem });
+            }
+
+            primary.Playlist.Add(playlist);
+        }
+    }
+
+    /// <summary>
+    /// True for playlists imported from an extra project (id prefixed by
+    /// MergeSourceProject's srcN label). They have no tractor track, so
+    /// track-based actions (shuffle-and-render) do not apply to them.
+    /// </summary>
+    public static bool IsMergedSourcePlaylist(Playlist playlist) =>
+        System.Text.RegularExpressions.Regex.IsMatch(playlist.Id, @"^src\d+_");
+
+    /// <summary>
     /// Where generated shuffle/random projects live before rendering - our own temp
     /// subfolder, so they can be deleted safely once their job reaches a terminal state.
     /// </summary>
@@ -210,6 +300,28 @@ public class ShotcutService(IXmlService xmlService)
     }
 
     /// <summary>
+    /// Collapse entries that show the same footage: identical resource file AND
+    /// identical in/out range. Different segments of the same file survive.
+    /// Producers without a resolvable chain resource compare by producer id.
+    /// </summary>
+    public static List<Entry> DedupeEntries(Mlt project, IEnumerable<Entry> entries)
+    {
+        var resourceByProducer = new Dictionary<string, string>();
+        foreach (var chain in project.Chain)
+        {
+            resourceByProducer.TryAdd(chain.Id,
+                chain.Property.FirstOrDefault(p => p.Name == "resource")?.Text ?? chain.Id);
+        }
+
+        return [.. entries.DistinctBy(e =>
+        (
+            resourceByProducer.GetValueOrDefault(e.Producer, e.Producer).ToUpperInvariant(),
+            e.In,
+            e.Out
+        ))];
+    }
+
+    /// <summary>
     /// Run the simulated-annealing selection over the chosen source playlists and
     /// return the shuffled entry sequence for one compilation.
     /// </summary>
@@ -217,7 +329,8 @@ public class ShotcutService(IXmlService xmlService)
         Mlt project,
         List<(int PlaylistIndex, int TargetDurationSeconds)> sourcePlaylists,
         double durationWeight,
-        double numberOfVideosWeight)
+        double numberOfVideosWeight,
+        bool swingBias = false)
     {
         var allVideos = new List<Entry>();
         int totalTargetDuration = 0;
@@ -233,18 +346,28 @@ public class ShotcutService(IXmlService xmlService)
 
             totalTargetDuration += actualTarget;
 
-            var selectedVideos = new SimulatedAnnealingVideoSelector(actualTarget, durationWeight, numberOfVideosWeight)
-                .SelectVideos([.. project.Playlist[playlistIndex].Entry.Shuffle()])
-                .Shuffle()
-                .ToList();
+            var playlistPool = DedupeEntries(project, project.Playlist[playlistIndex].Entry);
+
+            var selectedVideos = swingBias
+                ? SwingVideoSelector.Select(playlistPool, actualTarget)
+                : new SimulatedAnnealingVideoSelector(actualTarget, durationWeight, numberOfVideosWeight)
+                    .SelectVideos([.. playlistPool.Shuffle()])
+                    .Shuffle()
+                    .ToList();
 
             allVideos.AddRange(selectedVideos);
         }
 
-        return new SimulatedAnnealingVideoSelector(totalTargetDuration, durationWeight, numberOfVideosWeight)
-            .SelectVideos(allVideos)
-            .Shuffle()
-            .ToList();
+        var combinedPool = DedupeEntries(project, allVideos);
+
+        // Swing arranges its own order (longs anchoring, shorts dealt into the
+        // gaps) - shuffling it would erase the pattern
+        return swingBias
+            ? SwingVideoSelector.Select(combinedPool, totalTargetDuration)
+            : new SimulatedAnnealingVideoSelector(totalTargetDuration, durationWeight, numberOfVideosWeight)
+                .SelectVideos(combinedPool)
+                .Shuffle()
+                .ToList();
     }
 
     /// <summary>
@@ -280,9 +403,10 @@ public class ShotcutService(IXmlService xmlService)
         Mlt project,
         List<(int PlaylistIndex, int TargetDurationSeconds)> sourcePlaylists,
         double durationWeight,
-        double numberOfVideosWeight)
+        double numberOfVideosWeight,
+        bool swingBias = false)
     {
-        var finalVideos = SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight);
+        var finalVideos = SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight, swingBias);
         var (newPlaylist, newTrackIndex) = AddGeneratedTrack(project, finalVideos, "generated");
 
         // Set render range to match the generated playlist duration
@@ -305,7 +429,8 @@ public class ShotcutService(IXmlService xmlService)
         double numberOfVideosWeight,
         int cells,
         bool splitSingleCompilation = false,
-        List<int>? cellSources = null)
+        List<int>? cellSources = null,
+        bool swingBias = false)
     {
         if (cells is not (2 or 4))
             throw new ArgumentException("Grid layout supports 2 or 4 cells", nameof(cells));
@@ -325,7 +450,7 @@ public class ShotcutService(IXmlService xmlService)
         List<List<Entry>> cellEntries;
         if (splitSingleCompilation)
         {
-            var compilation = SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight);
+            var compilation = SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight, swingBias);
             cellEntries = SplitEvenlyByDuration(compilation, cells);
         }
         else if (cellSources is not null)
@@ -336,13 +461,13 @@ public class ShotcutService(IXmlService xmlService)
                     .Where(p => p.PlaylistIndex == sourceIndex)
                     .Select(p => p.TargetDurationSeconds)
                     .FirstOrDefault();
-                return SelectRandomEntries(project, [(sourceIndex, targetSeconds)], durationWeight, numberOfVideosWeight);
+                return SelectRandomEntries(project, [(sourceIndex, targetSeconds)], durationWeight, numberOfVideosWeight, swingBias);
             })];
         }
         else
         {
             cellEntries = [.. Enumerable.Range(0, cells)
-                .Select(_ => SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight))];
+                .Select(_ => SelectRandomEntries(project, sourcePlaylists, durationWeight, numberOfVideosWeight, swingBias))];
         }
 
         var trackIndices = new List<int>();
