@@ -20,6 +20,10 @@ $repoUrl = "http://192.168.1.15:3000/$($env:REPO)"
 dotnet tool update -g vpk
 if ($LASTEXITCODE -ne 0) { throw "vpk install failed ($LASTEXITCODE)" }
 
+# A fresh install lands in the profile's dotnet tools dir, which is not on
+# PATH in this just-spawned process - prepend it so vpk resolves
+$env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+
 # Previous release as delta base - best-effort (first release has none)
 vpk download gitea --repoUrl $repoUrl --token $token
 if ($LASTEXITCODE -ne 0) { Write-Host "No previous Velopack release for delta base (ok)" }
