@@ -19,7 +19,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build, package, and publish to Forgejo
-        shell: powershell
+        # Explicit bypass: the runner executes as SYSTEM, whose effective
+        # execution policy is Restricted and would refuse the step script
+        shell: powershell -ExecutionPolicy Bypass -Command ". '{0}'"
         env:
           REF_NAME: ${{ github.ref_name }}
         run: |
