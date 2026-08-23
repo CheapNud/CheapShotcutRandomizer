@@ -23,6 +23,9 @@
         }
         else
         {
+            <ProgressButton OnClick="@AddSourceProjectAsync" StartIcon="@Icons.Material.Filled.PlaylistAdd">
+                Add Sources
+            </ProgressButton>
             <ProgressButton OnClick="@LoadProjectAsync" StartIcon="@Icons.Material.Filled.Refresh">
                 Load Different Project
             </ProgressButton>
@@ -35,6 +38,20 @@
     <MudAlert Severity="Severity.Success" Class="mb-6">
         Project loaded: <strong>@ProjectState.CurrentProjectPath</strong>
     </MudAlert>
+}
+
+@if (ProjectState.CurrentProject != null && ProjectState.ExtraProjectPaths.Count > 0)
+{
+    <MudStack Row="true" Spacing="1" Class="mb-6 flex-wrap">
+        @foreach (var extraPath in ProjectState.ExtraProjectPaths)
+        {
+            var path = extraPath;
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary"
+                     OnClose="@(() => RemoveSourceProjectAsync(path))">
+                @Path.GetFileName(path)
+            </MudChip>
+        }
+    </MudStack>
 }
 
 @if (ProjectState.CurrentProject != null)
@@ -76,15 +93,18 @@
                                      Color="Color.Primary" />
                         <MudText><strong>[@index]</strong> @playlist.Name (@playlist.Entry.Count clips)</MudText>
                         <MudSpacer />
-                        <ProgressButton Size="Size.Small" Color="Color.Primary"
-                                        OnClick="@(() => ShufflePlaylistAsync(index))">
-                            Shuffle
-                        </ProgressButton>
-                        <ProgressButton Size="Size.Small" Color="Color.Success"
-                                        OnClick="@(() => ShuffleAndAddToQueueAsync(index))"
-                                        StartIcon="@Icons.Material.Filled.AddToQueue">
-                            Add to Queue
-                        </ProgressButton>
+                        @if (!ShotcutService.IsMergedSourcePlaylist(playlist))
+                        {
+                            <ProgressButton Size="Size.Small" Color="Color.Primary"
+                                            OnClick="@(() => ShufflePlaylistAsync(index))">
+                                Shuffle
+                            </ProgressButton>
+                            <ProgressButton Size="Size.Small" Color="Color.Success"
+                                            OnClick="@(() => ShuffleAndAddToQueueAsync(index))"
+                                            StartIcon="@Icons.Material.Filled.AddToQueue">
+                                Add to Queue
+                            </ProgressButton>
+                        }
                     </MudStack>
                 </MudListItem>
             }
@@ -95,45 +115,64 @@
         <MudText Typo="Typo.h5" Class="mb-3">Generate Random Compilation</MudText>
 
         <MudStack Spacing="3">
-            <MudStack Spacing="1">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudText Typo="Typo.body2">
-                        <strong>Duration Weight:</strong> @_durationWeight.ToString("0.00")
-                    </MudText>
-                    <MudTooltip Text="Controls preference for shorter vs longer videos. Higher values strongly favor shorter clips. Use 0 for no bias, 4 for balanced mix, or 10+ to heavily prioritize short videos.">
-                        <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Primary" />
-                    </MudTooltip>
-                </MudStack>
-                <MudSlider @bind-Value="_durationWeight"
-                           Min="0" Max="20" Step="0.05"
-                           Color="Color.Primary"
-                           Variant="Variant.Filled">
-                    @_durationWeight.ToString("0.00")
-                </MudSlider>
+            <MudSelect @bind-Value="_lengthBias"
+                       Label="Clip length selection"
+                       Variant="Variant.Outlined"
+                       T="ClipLengthBias"
+                       Margin="Margin.Dense"
+                       Style="max-width: 320px;">
+                <MudSelectItem Value="ClipLengthBias.Weighted" T="ClipLengthBias">Weighted (use sliders)</MudSelectItem>
+                <MudSelectItem Value="ClipLengthBias.Swing" T="ClipLengthBias">Swing between short and long</MudSelectItem>
+            </MudSelect>
+            @if (_lengthBias == ClipLengthBias.Swing)
+            {
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    Affects video length selection: 0 = no preference • 0.5 = minimal bias • 4 = balanced (recommended) • 10+ = only short clips
+                    Longer clips play in random order with the shorter clips spread evenly between them. The weight sliders are ignored.
                 </MudText>
-            </MudStack>
+            }
 
-            <MudStack Spacing="1">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudText Typo="Typo.body2">
-                        <strong>Number of Videos Weight:</strong> @_numberOfVideosWeight.ToString("0.00")
+            @if (_lengthBias == ClipLengthBias.Weighted)
+            {
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudText Typo="Typo.body2">
+                            <strong>Duration Weight:</strong> @_durationWeight.ToString("0.00")
+                        </MudText>
+                        <MudTooltip Text="Controls preference for shorter vs longer videos. Higher values strongly favor shorter clips. Use 0 for no bias, 4 for balanced mix, or 10+ to heavily prioritize short videos.">
+                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Primary" />
+                        </MudTooltip>
+                    </MudStack>
+                    <MudSlider @bind-Value="_durationWeight"
+                               Min="0" Max="20" Step="0.05"
+                               Color="Color.Primary"
+                               Variant="Variant.Filled">
+                        @_durationWeight.ToString("0.00")
+                    </MudSlider>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Affects video length selection: 0 = no preference • 0.5 = minimal bias • 4 = balanced (recommended) • 10+ = only short clips
                     </MudText>
-                    <MudTooltip Text="Controls preference for including more clips in the final playlist. Higher values will try to maximize the number of videos included. Use 0 for duration-focused selection, or 0.8 for variety.">
-                        <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Primary" />
-                    </MudTooltip>
                 </MudStack>
-                <MudSlider @bind-Value="_numberOfVideosWeight"
-                           Min="0" Max="5" Step="0.01"
-                           Color="Color.Primary"
-                           Variant="Variant.Filled">
-                    @_numberOfVideosWeight.ToString("0.00")
-                </MudSlider>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    Affects clip count: 0 = duration-focused • 0.5 = balanced • 0.8 = more variety (recommended) • 1+ = maximum clips
-                </MudText>
-            </MudStack>
+
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudText Typo="Typo.body2">
+                            <strong>Number of Videos Weight:</strong> @_numberOfVideosWeight.ToString("0.00")
+                        </MudText>
+                        <MudTooltip Text="Controls preference for including more clips in the final playlist. Higher values will try to maximize the number of videos included. Use 0 for duration-focused selection, or 0.8 for variety.">
+                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Primary" />
+                        </MudTooltip>
+                    </MudStack>
+                    <MudSlider @bind-Value="_numberOfVideosWeight"
+                               Min="0" Max="5" Step="0.01"
+                               Color="Color.Primary"
+                               Variant="Variant.Filled">
+                        @_numberOfVideosWeight.ToString("0.00")
+                    </MudSlider>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Affects clip count: 0 = duration-focused • 0.5 = balanced • 0.8 = more variety (recommended) • 1+ = maximum clips
+                    </MudText>
+                </MudStack>
+            }
 
             <MudStack Spacing="1">
                 <MudSelect @bind-Value="_gridLayout"
@@ -260,6 +299,7 @@
 
 @code {
     private enum CellContentMode { IndependentRandom, SplitCompilation, AssignedSources }
+    private enum ClipLengthBias { Weighted, Swing }
 
     // A mismatch under this many seconds is normal random-packing jitter; above it
     // the shorter cells visibly hold black, so the user gets the trim dialog
@@ -267,6 +307,7 @@
 
     private double _durationWeight = 4.0;
     private double _numberOfVideosWeight = 0.8;
+    private ClipLengthBias _lengthBias = ClipLengthBias.Weighted;
     private int _gridLayout = 1;
     private CellContentMode _cellMode = CellContentMode.IndependentRandom;
     private readonly Dictionary<int, int> _cellAssignments = [];
@@ -389,7 +430,8 @@
                 return;
 
             ProjectState.CurrentProjectPath = path;
-            ProjectState.CurrentProject = await ShotcutSvc.LoadProjectAsync(path);
+            ProjectState.ExtraProjectPaths.Clear();
+            await ReloadCombinedProjectAsync();
 
             if (ProjectState.CurrentProject == null)
             {
@@ -403,6 +445,55 @@
         {
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
+    }
+
+    /// <summary>
+    /// Reload the primary project with all extra sources merged in. Selections are
+    /// cleared because playlist indices shift whenever the source set changes.
+    /// </summary>
+    private async Task ReloadCombinedProjectAsync()
+    {
+        var combined = await ShotcutSvc.LoadCombinedProjectAsync(
+            ProjectState.CurrentProjectPath, ProjectState.ExtraProjectPaths);
+
+        if (combined == null)
+        {
+            Snackbar.Add("Failed to load one of the source projects", Severity.Error);
+            return;
+        }
+
+        _selectedPlaylists.Clear();
+        _targetSeconds.Clear();
+        _cellAssignments.Clear();
+        ProjectState.CurrentProject = combined;
+    }
+
+    private async Task AddSourceProjectAsync()
+    {
+        var path = await Desktop.OpenFileDialogAsync(new()
+        {
+            Title = "Add Source Project",
+            Filters = [new() { Name = "MLT Project", Extensions = ["mlt"] }]
+        });
+
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        if (string.Equals(path, ProjectState.CurrentProjectPath, StringComparison.OrdinalIgnoreCase)
+            || ProjectState.ExtraProjectPaths.Contains(path, StringComparer.OrdinalIgnoreCase))
+        {
+            Snackbar.Add("That project is already loaded", Severity.Warning);
+            return;
+        }
+
+        ProjectState.ExtraProjectPaths.Add(path);
+        await ReloadCombinedProjectAsync();
+    }
+
+    private async Task RemoveSourceProjectAsync(string path)
+    {
+        ProjectState.ExtraProjectPaths.Remove(path);
+        await ReloadCombinedProjectAsync();
     }
 
     private async Task ShufflePlaylistAsync(int playlistIndex)
@@ -437,7 +528,7 @@
 
             // Generate on a fresh copy - mutating the shared project in place made
             // every repeat click stack another generated playlist onto the timeline
-            var projectCopy = await ShotcutSvc.LoadProjectAsync(ProjectState.CurrentProjectPath);
+            var projectCopy = await ShotcutSvc.LoadCombinedProjectAsync(ProjectState.CurrentProjectPath, ProjectState.ExtraProjectPaths);
             if (projectCopy == null)
             {
                 Snackbar.Add("Failed to load project copy", Severity.Error);
@@ -452,7 +543,8 @@
                 projectCopy,
                 sourcePlaylists,
                 _durationWeight,
-                _numberOfVideosWeight
+                _numberOfVideosWeight,
+                swingBias: _lengthBias == ClipLengthBias.Swing
             );
 
             var newPath = await ShotcutSvc.SaveProjectAsync(projectCopy, ProjectState.CurrentProjectPath);
@@ -572,7 +664,7 @@
             }
 
             // Create a copy of the project for generation
-            var projectCopy = await ShotcutSvc.LoadProjectAsync(ProjectState.CurrentProjectPath);
+            var projectCopy = await ShotcutSvc.LoadCombinedProjectAsync(ProjectState.CurrentProjectPath, ProjectState.ExtraProjectPaths);
             if (projectCopy == null)
             {
                 Snackbar.Add("Failed to load project copy", Severity.Error);
@@ -601,7 +693,8 @@
                     _numberOfVideosWeight,
                     _gridLayout,
                     _cellMode == CellContentMode.SplitCompilation,
-                    cellSources
+                    cellSources,
+                    swingBias: _lengthBias == ClipLengthBias.Swing
                 );
 
                 if (!await ConfirmCellDurationsAsync(projectCopy, gridResult))
@@ -623,7 +716,8 @@
                     projectCopy,
                     sourcePlaylists,
                     _durationWeight,
-                    _numberOfVideosWeight
+                    _numberOfVideosWeight,
+                    swingBias: _lengthBias == ClipLengthBias.Swing
                 );
 
                 preSelectedTracks = trackIndex.ToString();
